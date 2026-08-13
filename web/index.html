@@ -35,6 +35,7 @@ h1{font-size:clamp(28px,5vw,42px);line-height:1.08;letter-spacing:-.02em;margin:
 .drop.hot{border-color:var(--accent);background:var(--accent-soft);transform:scale(1.01)}
 .drop .big{font-size:17px;font-weight:650}
 .drop .hint{font-size:13px;color:var(--ink2);margin-top:6px}
+.pickrow{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
 button{font:inherit;border:0;border-radius:10px;padding:11px 20px;cursor:pointer;
   background:var(--accent);color:#fff;font-weight:600;transition:transform .15s,opacity .15s}
 button:hover:not(:disabled){transform:scale(1.03)}
@@ -76,10 +77,13 @@ a{color:var(--accent)}
   <div class="card" id="panel">
     <div class="drop" id="drop">
       <div class="big">Drop the session folder or a <span class="mono">.jsonl</span> here</div>
-      <div class="hint">…or click to pick a folder. Look in
-        <span class="mono">~/.claude/projects/&lt;your-project&gt;/</span> —
+      <div class="hint">Look in <span class="mono">~/.claude/projects/&lt;your-project&gt;/</span> —
         take the <span class="mono">&lt;uuid&gt;.jsonl</span> and, for sub-agent detail, the
         <span class="mono">&lt;uuid&gt;/</span> folder next to it. Several sessions at once are merged.</div>
+      <div class="pickrow">
+        <button id="pickFile">Choose .jsonl file(s)</button>
+        <button class="ghost" id="pickDir">Choose a folder</button>
+      </div>
     </div>
     <div class="bar" id="bar"><i></i></div>
     <div class="stat" id="stat">waiting for a file…</div>
@@ -154,13 +158,19 @@ drop.addEventListener('drop', async e => {
   for (const it of items) await walkEntry(it, '', out);
   run(out);
 });
-drop.onclick = () => {
+// Two pickers, because one cannot do both: an <input> with webkitdirectory ONLY offers
+// folders (a lone .jsonl is unselectable in it), and without it you cannot pick a folder.
+function pick(folder) {
   const inp = document.createElement('input');
-  inp.type = 'file'; inp.multiple = true; inp.webkitdirectory = true;
+  inp.type = 'file'; inp.multiple = true;
+  if (folder) inp.webkitdirectory = true;      // no `accept`: it greys out .jsonl on some OSes
   inp.onchange = () => run([...inp.files].filter(f => KEEP(f.name))
     .map(f => ({path: f.webkitRelativePath || f.name, file: f})));
   inp.click();
-};
+}
+drop.onclick = e => { if (!e.target.closest('button')) pick(false); };
+$('#pickFile').onclick = e => { e.stopPropagation(); pick(false); };
+$('#pickDir').onclick = e => { e.stopPropagation(); pick(true); };
 
 async function run(files) {
   $('#kv').innerHTML = ''; $('#actions').hidden = true; $('#reportWrap').innerHTML = '';
