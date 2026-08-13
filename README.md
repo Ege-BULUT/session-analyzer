@@ -74,6 +74,30 @@ somewhere else.
 Cache-read usually dominates the processed total — long context is re-read every turn. That is
 expected and cheap; switch the metric to **Generated** or **New input** for the real load.
 
+## The browser version (this branch)
+
+`web/` is a static, zero-backend build of the same tool: drop a session log on the page and the
+analysis runs **in the browser** — no upload, no server, no function. It is what gets deployed.
+
+```bash
+python3 build_web.py                       # regenerate web/report-assets.js from the Python file
+python3 -m http.server -d web 8815         # try it locally → http://127.0.0.1:8815
+node tests/conformance.mjs <session.jsonl>  # prove the JS and Python analyzers agree
+```
+
+Two implementations, one truth:
+
+- the **report renderer** (shell, CSS, behaviour) has a single source — `analyze_and_report.py` —
+  and `build_web.py` compiles it into `web/report-assets.js`. Never edit that file by hand.
+- the **aggregation** exists twice (Python for the CLI, `web/analyze.js` for the browser), and
+  `tests/conformance.mjs` runs both over the same transcript and fails on any difference. Run it
+  after touching either side.
+
+Why not one shared backend API? The input is the user's full transcript — tens of megabytes of
+their own prompts and tool output. Shipping that to a server would break the one guarantee worth
+having (nothing leaves the machine), and it exceeds serverless request limits anyway. So the core
+runs where the data already is: on the user's machine, in the CLI or in their browser tab.
+
 ## Files
 
 | File | Role |

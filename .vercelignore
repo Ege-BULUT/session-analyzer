@@ -1,0 +1,5 @@
+# only the static site is deployed
+*
+!web/
+!web/**
+!vercel.json

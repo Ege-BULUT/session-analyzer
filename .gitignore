@@ -6,3 +6,4 @@ report-data.json
 viewdata.json
 out/
 .DS_Store
+.vercel/

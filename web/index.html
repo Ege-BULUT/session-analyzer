@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Session analyzer — Claude Code session report</title>
+<meta name="description" content="Drop a Claude Code session log and get a self-contained report: token spend, timing, sub-agents, timeline. Runs entirely in your browser — nothing is uploaded.">
+<style>
+:root{
+  --bg:#eef1f6; --surface:#fff; --surface2:#f5f7fb; --ink:#141d2b; --ink2:#5a6a82;
+  --line:#dde3ee; --line2:#ccd5e3; --accent:#3457d5; --accent-soft:#e4e9fb;
+  --good:#2fa876; --crit:#e14a67;
+  --shadow:0 1px 2px rgba(20,29,43,.06),0 8px 24px rgba(20,29,43,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0c1117; --surface:#141b25; --surface2:#1a232f; --ink:#e9eef6; --ink2:#8f9fb5;
+  --line:#232f3d; --line2:#2d3b4c; --accent:#6d8bff; --accent-soft:#1c2740;
+  --good:#43c48f; --crit:#f0687f; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.55;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+.wrap{max-width:900px;margin:0 auto;padding:56px 20px 80px}
+.eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink2)}
+h1{font-size:clamp(28px,5vw,42px);line-height:1.08;letter-spacing:-.02em;margin:.3em 0 .2em;text-wrap:balance}
+.sub{color:var(--ink2);max-width:62ch;font-size:15px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  box-shadow:var(--shadow);padding:22px 24px;margin-top:22px}
+.drop{border:1.5px dashed var(--line2);border-radius:14px;background:var(--surface2);
+  padding:44px 20px;text-align:center;cursor:pointer;
+  transition:border-color .15s,background .15s,transform .15s}
+.drop:hover{border-color:var(--accent)}
+.drop.hot{border-color:var(--accent);background:var(--accent-soft);transform:scale(1.01)}
+.drop .big{font-size:17px;font-weight:650}
+.drop .hint{font-size:13px;color:var(--ink2);margin-top:6px}
+button{font:inherit;border:0;border-radius:10px;padding:11px 20px;cursor:pointer;
+  background:var(--accent);color:#fff;font-weight:600;transition:transform .15s,opacity .15s}
+button:hover:not(:disabled){transform:scale(1.03)}
+button:disabled{opacity:.45;cursor:default}
+button.ghost{background:var(--surface2);color:var(--ink2);border:1px solid var(--line);font-weight:500}
+.bar{height:6px;border-radius:4px;background:var(--surface2);overflow:hidden;margin-top:16px;position:relative}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+.bar.busy i{width:100%;background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  background-size:40% 100%;background-repeat:no-repeat;animation:sweep 1.1s linear infinite}
+@keyframes sweep{from{background-position:-40% 0}to{background-position:140% 0}}
+.stat{margin-top:12px;font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--ink2);min-height:20px}
+.err{color:var(--crit)}
+.kv{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.tag{font-family:ui-monospace,Menlo,monospace;font-size:12px;padding:4px 9px;border-radius:7px;
+  background:var(--surface2);color:var(--ink2);border:1px solid var(--line)}
+.tag b{color:var(--ink)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.grid{display:grid;gap:16px;grid-template-columns:1fr 1fr;margin-top:26px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.feat h3{font-size:14px;margin:0 0 4px}
+.feat p{margin:0;font-size:13.5px;color:var(--ink2)}
+iframe{width:100%;height:min(82vh,1100px);border:1px solid var(--line);border-radius:14px;
+  background:var(--surface);box-shadow:var(--shadow);margin-top:22px}
+.foot{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink2);font-size:13px}
+a{color:var(--accent)}
+.priv{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--good);
+  border:1px solid color-mix(in srgb,var(--good) 40%,transparent);border-radius:999px;padding:5px 12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">claude code · session telemetry</div>
+  <h1>Drop a session log,<br>get the whole picture.</h1>
+  <p class="sub">Token spend per actor, three separate time measures, the parallel-agent flow
+    timeline, and every sub-agent task as a searchable row — from the transcript Claude Code
+    already wrote on your machine.</p>
+  <p style="margin-top:14px"><span class="priv">🔒 Runs in your browser — the file never leaves it</span></p>
+
+  <div class="card" id="panel">
+    <div class="drop" id="drop">
+      <div class="big">Drop the session folder or a <span class="mono">.jsonl</span> here</div>
+      <div class="hint">…or click to pick a folder. Look in
+        <span class="mono">~/.claude/projects/&lt;your-project&gt;/</span> —
+        take the <span class="mono">&lt;uuid&gt;.jsonl</span> and, for sub-agent detail, the
+        <span class="mono">&lt;uuid&gt;/</span> folder next to it. Several sessions at once are merged.</div>
+    </div>
+    <div class="bar" id="bar"><i></i></div>
+    <div class="stat" id="stat">waiting for a file…</div>
+    <div class="kv" id="kv"></div>
+    <div class="actions" id="actions" hidden>
+      <button id="dl">Download report.html</button>
+      <button class="ghost" id="again">Analyze another</button>
+    </div>
+  </div>
+
+  <div id="reportWrap"></div>
+
+  <div class="grid" id="features">
+    <div class="card feat"><h3>Tokens, honestly split</h3>
+      <p>Input, cache-creation, cache-read and output per actor — the main thread and each
+         sub-agent type — with the metric switchable.</p></div>
+    <div class="card feat"><h3>Three time measures</h3>
+      <p>Wall-clock, active wall-clock (idle removed) and agent work-hours (parallel agents summed).
+         Mixing these up is how session numbers get misread.</p></div>
+    <div class="card feat"><h3>Parallel-agent timeline</h3>
+      <p>Lanes of what ran concurrently, concurrent-agent count, tokens over time, and the
+         run split into activity blocks on 20-minute idle gaps.</p></div>
+    <div class="card feat"><h3>Trilingual, offline</h3>
+      <p>English · Türkçe · 简体中文, light and dark. The downloaded report is one self-contained
+         HTML file that works with no network at all.</p></div>
+  </div>
+
+  <div class="foot">
+    Same engine as the command-line tool — the report renderer is generated from it, and a
+    conformance test asserts the browser and Python analyzers produce identical numbers.
+    <a href="https://github.com/Ege-BULUT/session-analyzer">Source on GitHub</a>.
+  </div>
+</div>
+
+<script type="module">
+import {analyze, groupFiles} from './analyze.js';
+import {buildReport} from './report-assets.js';
+
+const $ = s => document.querySelector(s);
+const KEEP = n => n.endsWith('.jsonl') || n.endsWith('.meta.json');
+const fmt = n => n.toLocaleString('en-US');
+const kfmt = n => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
+  : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : '' + n;
+const hrs = s => s >= 3600 ? (s / 3600).toFixed(1) + 'h' : (s / 60).toFixed(0) + 'm';
+let html = null;
+
+function say(msg, bad) { const s = $('#stat'); s.textContent = msg; s.className = 'stat' + (bad ? ' err' : ''); }
+function busy(on) { $('#bar').classList.toggle('busy', on); }
+
+function walkEntry(entry, path, out) {
+  return new Promise(res => {
+    if (entry.isFile) {
+      entry.file(f => { if (KEEP(f.name)) out.push({path: path + f.name, file: f}); res(); }, res);
+    } else if (entry.isDirectory) {
+      const rd = entry.createReader(); const all = [];
+      const step = () => rd.readEntries(async es => {
+        if (!es.length) { for (const e of all) await walkEntry(e, path + entry.name + '/', out); return res(); }
+        all.push(...es); step();
+      }, res);
+      step();
+    } else res();
+  });
+}
+
+const drop = $('#drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hot'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('hot'));
+drop.addEventListener('drop', async e => {
+  e.preventDefault(); drop.classList.remove('hot');
+  const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const out = [];
+  for (const it of items) await walkEntry(it, '', out);
+  run(out);
+});
+drop.onclick = () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.multiple = true; inp.webkitdirectory = true;
+  inp.onchange = () => run([...inp.files].filter(f => KEEP(f.name))
+    .map(f => ({path: f.webkitRelativePath || f.name, file: f})));
+  inp.click();
+};
+
+async function run(files) {
+  $('#kv').innerHTML = ''; $('#actions').hidden = true; $('#reportWrap').innerHTML = '';
+  if (!files.length) return say('nothing usable there — need a .jsonl transcript', true);
+  const sessions = groupFiles(files);
+  if (!sessions.length) return say('no <uuid>.jsonl transcript in that drop', true);
+  busy(true);
+  say('reading ' + sessions.length + ' session(s)…');
+  try {
+    const t0 = performance.now();
+    const data = await analyze(sessions, msg => say(msg));
+    say('rendering…');
+    html = buildReport(data);
+    const m = data.meta;
+    $('#kv').innerHTML = [
+      ['sessions', sessions.length], ['sub-agents', m.n_subagents], ['main turns', fmt(m.n_main_assistant)],
+      ['tokens', kfmt(m.grand_total.total)], ['generated', kfmt(m.grand_total.out)],
+      ['active', hrs(m.active_sec)], ['work-hours', hrs(m.busy_sec)],
+    ].map(([k, v]) => `<span class="tag">${k}: <b>${v}</b></span>`).join('');
+    const f = document.createElement('iframe');
+    f.setAttribute('title', 'session report');
+    f.srcdoc = html;
+    $('#reportWrap').appendChild(f);
+    $('#actions').hidden = false;
+    $('#features').hidden = true;
+    busy(false);
+    say('done in ' + ((performance.now() - t0) / 1000).toFixed(1) + 's — the report below is yours to keep');
+    f.scrollIntoView({behavior: 'smooth', block: 'start'});
+  } catch (err) {
+    busy(false);
+    say(err.message || String(err), true);
+  }
+}
+
+$('#dl').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([html], {type: 'text/html'}));
+  a.download = 'session-report.html';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
+$('#again').onclick = () => {
+  html = null; $('#reportWrap').innerHTML = ''; $('#kv').innerHTML = '';
+  $('#actions').hidden = true; $('#features').hidden = false;
+  say('waiting for a file…');
+  window.scrollTo({top: 0, behavior: 'smooth'});
+};
+</script>
+</body>
+</html>
