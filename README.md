@@ -1,7 +1,12 @@
 # session-analyzer
 
+**[Try it in your browser →](https://agent-session-report.vercel.app)** · [Docs](https://agent-session-report.vercel.app/docs)
+
 Turn a Claude Code session into one self-contained HTML report: where the tokens went, how long
 the work really took, what every sub-agent did, and an hour-by-hour timeline of the run.
+
+Drop a session log on the site and the analysis runs in your own tab — nothing is uploaded, there
+is no backend. Or run the same analyzer locally from the command line.
 
 Deterministic and offline — it reads the JSONL transcript the CLI already wrote, sums the
 `usage` fields, and renders a single file. No model calls, no telemetry, no network.
@@ -76,8 +81,10 @@ expected and cheap; switch the metric to **Generated** or **New input** for the 
 
 ## The browser version (this branch)
 
-`web/` is a static, zero-backend build of the same tool: drop a session log on the page and the
-analysis runs **in the browser** — no upload, no server, no function. It is what gets deployed.
+`web/` is a static, zero-backend build of the same tool, deployed at
+**[agent-session-report.vercel.app](https://agent-session-report.vercel.app)**: drop a session log
+on the page and the analysis runs **in the browser** — no upload, no server, no function.
+`web/docs.html` is the documentation page served at `/docs`.
 
 ```bash
 python3 build_web.py                       # regenerate web/report-assets.js from the Python file
