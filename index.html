@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Code session analyzer</title>
+<style>
+:root{
+  --bg:#eef1f6; --surface:#fff; --surface2:#f5f7fb; --ink:#141d2b; --ink2:#5a6a82;
+  --line:#dde3ee; --line2:#ccd5e3; --accent:#3457d5; --accent-soft:#e4e9fb;
+  --good:#2fa876; --crit:#e14a67;
+  --shadow:0 1px 2px rgba(20,29,43,.06),0 8px 24px rgba(20,29,43,.06);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0c1117; --surface:#141b25; --surface2:#1a232f; --ink:#e9eef6; --ink2:#8f9fb5;
+  --line:#232f3d; --line2:#2d3b4c; --accent:#6d8bff; --accent-soft:#1c2740;
+  --good:#43c48f; --crit:#f0687f; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);line-height:1.5;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1120px;margin:0 auto;padding:38px 20px 70px}
+h1{font-size:27px;letter-spacing:-.02em;margin:.2em 0 .1em}
+h2{font-size:15px;margin:0 0 10px}
+.sub{color:var(--ink2);max-width:64ch;font-size:14px}
+.eyebrow{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--ink2)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  box-shadow:var(--shadow);padding:18px 20px;margin-top:18px}
+.drop{border:1.5px dashed var(--line2);border-radius:12px;background:var(--surface2);
+  padding:22px 18px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.drop:hover{border-color:var(--accent);color:var(--ink)}
+.drop.hot{border-color:var(--accent);background:var(--accent-soft);transform:scale(1.01)}
+.drop .big{font-size:14px;font-weight:600}
+.drop .hint{font-size:12.5px;color:var(--ink2);margin-top:4px}
+.drop .picked{font-size:12.5px;color:var(--good);margin-top:8px;word-break:break-all}
+.row{display:grid;gap:14px;grid-template-columns:1fr 1fr}
+.panels{gap:18px;align-items:start}
+@media(max-width:900px){.row,.panels{grid-template-columns:1fr}}
+input[type=text],textarea{width:100%;font:inherit;font-size:13px;font-family:ui-monospace,Menlo,monospace;
+  padding:9px 11px;border-radius:9px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);resize:vertical}
+button{font:inherit;border:0;border-radius:10px;padding:11px 20px;cursor:pointer;
+  background:var(--accent);color:#fff;font-weight:600;transition:transform .15s,opacity .15s}
+button:hover:not(:disabled){transform:scale(1.03)}
+button:disabled{opacity:.45;cursor:default}
+button.ghost{background:var(--surface2);color:var(--ink2);border:1px solid var(--line);font-weight:500}
+.sessions{max-height:290px;overflow:auto;border:1px solid var(--line);border-radius:11px;margin-top:4px}
+.srow{display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:center;
+  padding:9px 13px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer}
+.srow:last-child{border-bottom:0}
+.srow:hover{background:var(--surface2)}
+.srow.on{background:var(--accent-soft)}
+.srow .ttl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .pj{display:block;margin-top:1px;color:var(--ink2);font-size:11.5px;font-family:ui-monospace,Menlo,monospace;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .n{font-family:ui-monospace,Menlo,monospace;color:var(--ink2);font-size:12px;white-space:nowrap}
+.sessions{position:relative}
+.srow.shead{position:sticky;top:0;z-index:4;background:var(--surface);cursor:default;
+  font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink2);padding:8px 13px}
+.srow.shead:hover{background:var(--surface)}
+.shead .sortable{cursor:pointer;user-select:none;transition:color .15s}
+.shead .sortable:hover{color:var(--accent)}
+.shead .sortable.on{color:var(--accent)}
+.band{position:absolute;z-index:5;pointer-events:none;border-radius:5px;
+  border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.band.sub{border-color:var(--crit);background:color-mix(in srgb,var(--crit) 14%,transparent)}
+.srow.band-hit{box-shadow:inset 3px 0 0 var(--accent)}
+.tag{font-family:ui-monospace,Menlo,monospace;font-size:11px;padding:3px 8px;border-radius:6px;
+  background:var(--surface2);color:var(--ink2);border:1px solid var(--line)}
+.bar{height:6px;border-radius:4px;background:var(--surface2);overflow:hidden;margin-top:12px}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+pre.log{white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px;
+  margin:12px 0 0;max-height:220px;overflow:auto;color:var(--ink2)}
+.ok{color:var(--good);font-weight:600}
+.err{color:var(--crit);font-weight:600}
+.kv{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}
+.foot{color:var(--ink2);font-size:12.5px;margin-top:28px;border-top:1px solid var(--line);padding-top:14px}
+a{color:var(--accent)}
+
+/* --- layout: 60/40 inputs, 50/50 action row --- */
+/* minmax(0,..) + min-width:0 — without them the long monospace paths in the session list set
+   the left column's minimum size and squeeze the right panel down to a sliver */
+.row>*{min-width:0}
+.split{grid-template-columns:minmax(0,6fr) minmax(0,4fr)}
+.stack{display:flex;flex-direction:column;height:100%}
+.stack>.card{margin-top:18px}
+.panels{align-items:stretch}
+.runcard{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+.runcard h2{margin-bottom:16px}
+.runbtns{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.runcard .kv{justify-content:center}
+.runcard #openBtn{max-width:280px}
+.srow>*{min-width:0}
+@media(max-width:900px){.split,.actions{grid-template-columns:1fr}}
+/* --- progress --- */
+.bar{position:relative}
+.bar i{transition:width .25s}
+.bar.busy i{width:100% !important;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  background-size:40% 100%;background-repeat:no-repeat;animation:sweep 1.1s linear infinite}
+@keyframes sweep{from{background-position:-40% 0}to{background-position:140% 0}}
+.bar.done i{width:100% !important;background:var(--good);animation:none}
+.ticker{margin-top:11px;min-height:20px;font-size:13px;color:var(--ink2);
+  font-family:ui-monospace,Menlo,monospace}
+.ticker span{display:inline-block;animation:tin .35s cubic-bezier(.2,.7,.2,1)}
+@keyframes tin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#status{font-size:13px;color:var(--ink2);margin-top:12px;min-height:19px}
+button.open{background:var(--good);margin-top:14px;width:100%;animation:pop .35s cubic-bezier(.2,.7,.2,1)}
+@keyframes pop{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+/* --- confetti --- */
+.conf{position:fixed;top:-12px;width:9px;height:14px;z-index:9999;pointer-events:none;border-radius:2px}
+@keyframes fall{to{transform:translateY(105vh) rotate(var(--spin));opacity:.15}}
+@media (prefers-reduced-motion:reduce){.conf{display:none}.bar.busy i{animation:none;background:var(--accent)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">claude code · session telemetry</div>
+  <h1>Session analyzer</h1>
+  <p class="sub">Pick the sessions Claude Code stored on this machine, or drag in a copied log folder,
+     and get one self-contained HTML report: token spend, timing, and every sub-agent it ran.
+     Several sessions can be merged into a single report.</p>
+
+  <!-- the two inputs are peers: start from either side and let it find the other -->
+  <div class="row split panels">
+    <div class="card">
+      <h2>Session log(s) <span class="tag">merged if several</span></h2>
+      <div class="sessions" id="sessions"><div style="padding:14px;color:var(--ink2);font-size:13px">scanning ~/.claude/projects…</div></div>
+      <div class="drop" id="dropLog" style="margin-top:12px">
+        <div class="big">Drag a log folder or .jsonl here</div>
+        <div class="hint">session folder, project folder, or the transcript file — only .jsonl / .meta.json are read</div>
+        <div class="picked" id="pickedLog"></div>
+      </div>
+      <div style="font-size:12.5px;color:var(--ink2);margin:12px 0 6px">…or paste absolute paths — one per line</div>
+      <textarea id="pathLog" rows="3" placeholder="/path/to/&lt;session-uuid&gt;.jsonl&#10;/path/to/another-session.jsonl"></textarea>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <button class="ghost" id="matchBtn">← Find the sessions of that project folder</button>
+      </div>
+      <div id="logNote" style="font-size:12px;color:var(--ink2);margin-top:8px"></div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+      <h2>Project folder <span class="tag">optional</span></h2>
+      <p class="sub" style="font-size:12.5px;margin:0 0 10px">Only a shortcut for finding sessions:
+        it is filled in from the session you pick, and the button on the left goes the other way —
+        type a folder, get its sessions ticked.</p>
+      <input type="text" id="pathPipe" placeholder="/path/to/your/project">
+      <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <button class="ghost" id="detectBtn">Detect it from the selected session(s) →</button>
+      </div>
+      <div id="pipeNote" style="font-size:12px;color:var(--ink2);margin-top:8px"></div>
+      </div>
+
+      <div class="card runcard">
+        <h2>Run</h2>
+        <div class="runbtns">
+          <button id="run">Run analysis</button>
+          <button class="ghost" id="reset">Clear</button>
+        </div>
+        <div id="status"></div>
+        <button id="openBtn" class="open" hidden>Open the report ↗</button>
+        <div class="kv" id="kv"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Progress</h2>
+    <div class="bar" id="barWrap"><i id="bar"></i></div>
+    <div class="ticker" id="ticker"><span id="tickerTxt">idle — pick a session and press Run</span></div>
+    <pre class="log" id="log" hidden></pre>
+  </div>
+
+  <div class="foot">Runs locally: the page only talks to <span class="mono">127.0.0.1</span> and starts
+    <span class="mono">analyze_and_report.py</span> with the paths you give it. Nothing leaves the machine.</div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEEP = n => n.endsWith('.jsonl') || n.endsWith('.meta.json');
+const job = () => Math.random().toString(36).slice(2, 10);
+let picked = [];              // local session paths ticked in the list (several = merged report)
+let uploads = {log: []};
+let jobId = job();
+
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtSize = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB' : (b/1e3).toFixed(0)+' KB';
+const fmtDate = ms => new Date(ms*1000).toISOString().slice(0, 16).replace('T', ' ');
+
+// ---------- local sessions ----------
+// One list, three ways to work it: click / shift-click, sortable headers, and a rubber-band
+// marquee (hold ctrl/cmd while dragging the band to DEselect what it covers).
+let SESSIONS = [], sortKey = 'mtime', sortDir = -1, anchor = null, swallowClick = false;
+
+function syncPicked() {
+  picked = [...document.querySelectorAll('.srow.on')].map(x => x.dataset.path);
+  if (picked.length) { $('#pathLog').value = ''; uploads.log = []; $('#pickedLog').textContent = ''; }
+  setStatus(picked.length ? picked.length + ' session(s) selected — they are merged into one report' : '');
+  autoDetectProject();
+}
+
+function renderSessions() {
+  const sel = new Set(picked);
+  const dir = sortDir;
+  SESSIONS.sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    return (va < vb ? -1 : va > vb ? 1 : 0) * dir || (a.mtime < b.mtime ? 1 : -1);
+  });
+  const head = ['agents', 'size', 'mtime'].map(k =>
+    `<span class="n sortable${sortKey === k ? ' on' : ''}" data-k="${k}">${
+      k === 'mtime' ? 'last edited' : k}${sortKey === k ? (dir < 0 ? ' ↓' : ' ↑') : ''}</span>`).join('');
+  $('#sessions').innerHTML =
+    `<div class="srow shead"><span>session · title</span>${head}</div>` +
+    SESSIONS.slice(0, 300).map(s => `<div class="srow${sel.has(s.path) ? ' on' : ''}" data-path="${s.path}">
+      <div><div class="ttl"><b class="mono">${s.id.slice(0, 8)}</b>${s.title ? ' – ' + esc(s.title) : ''}</div>
+        <span class="pj">${s.p}</span></div>
+      <span class="n">${s.agents} agents</span><span class="n">${fmtSize(s.size)}</span><span class="n">${fmtDate(s.mtime)}</span>
+    </div>`).join('');
+
+  $('#sessions').querySelectorAll('.shead .sortable').forEach(h => h.onclick = e => {
+    e.stopPropagation();
+    const k = h.dataset.k;
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = -1; }
+    anchor = null; renderSessions();
+  });
+
+  [...$('#sessions').querySelectorAll('.srow:not(.shead)')].forEach((r, i) => r.onclick = e => {
+    if (swallowClick) { swallowClick = false; return; }
+    const all = [...$('#sessions').querySelectorAll('.srow:not(.shead)')];
+    if (e.shiftKey && anchor !== null) {
+      const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)];
+      all.slice(a, b + 1).forEach(x => x.classList.add('on'));
+    } else { r.classList.toggle('on'); anchor = i; }
+    syncPicked();
+  });
+}
+
+fetch('/api/sessions').then(r => r.json()).then(d => {
+  d.projects.forEach(p => p.sessions.forEach(s => SESSIONS.push({p: p.project, ...s})));
+  if (!SESSIONS.length) {
+    $('#sessions').innerHTML = '<div style="padding:14px;color:var(--ink2);font-size:13px">no sessions under '
+      + d.projectsDir + ' — drag a log folder in below</div>';
+    return;
+  }
+  renderSessions();
+  marquee();
+}).catch(e => { $('#sessions').innerHTML = '<div style="padding:14px" class="err">could not list sessions: ' + e + '</div>'; });
+
+// rubber-band selection inside the list; ctrl/cmd at press = deselect what the band covers
+function marquee() {
+  const box = $('#sessions');
+  const band = document.createElement('div');
+  band.className = 'band'; band.hidden = true;
+  box.appendChild(band);
+  let sx = 0, sy = 0, on = false, sub = false, moved = false;
+
+  const rectOf = e => {
+    const b = box.getBoundingClientRect();
+    const x = e.clientX - b.left + box.scrollLeft, y = e.clientY - b.top + box.scrollTop;
+    return {l: Math.min(sx, x), t: Math.min(sy, y), r: Math.max(sx, x), b: Math.max(sy, y)};
+  };
+  const paint = rc => {
+    band.style.left = rc.l + 'px'; band.style.top = rc.t + 'px';
+    band.style.width = (rc.r - rc.l) + 'px'; band.style.height = (rc.b - rc.t) + 'px';
+    box.querySelectorAll('.srow:not(.shead)').forEach(r => {
+      const t = r.offsetTop, b = t + r.offsetHeight;
+      r.classList.toggle('band-hit', b > rc.t && t < rc.b);
+    });
+  };
+
+  box.addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.target.closest('.shead')) return;
+    const b = box.getBoundingClientRect();
+    sx = e.clientX - b.left + box.scrollLeft; sy = e.clientY - b.top + box.scrollTop;
+    on = true; moved = false; sub = e.ctrlKey || e.metaKey;
+    band.classList.toggle('sub', sub);
+    document.body.style.userSelect = 'none';
+  });
+  window.addEventListener('mousemove', e => {
+    if (!on) return;
+    const rc = rectOf(e);
+    if (!moved && (rc.r - rc.l) + (rc.b - rc.t) < 6) return;
+    moved = true; band.hidden = false; paint(rc);
+  });
+  window.addEventListener('mouseup', () => {
+    document.body.style.userSelect = '';
+    if (!on) return;
+    on = false; band.hidden = true;
+    const hits = [...box.querySelectorAll('.srow.band-hit')];
+    hits.forEach(r => { r.classList.remove('band-hit'); r.classList.toggle('on', !sub); });
+    if (moved) { swallowClick = true; anchor = null; syncPicked(); }
+  });
+}
+
+// ---------- drag & drop (folders come through webkitGetAsEntry) ----------
+function walkEntry(entry, path, out) {
+  return new Promise(res => {
+    if (entry.isFile) {
+      entry.file(f => { if (KEEP(f.name)) out.push({file: f, rel: path + f.name}); res(); }, res);
+    } else if (entry.isDirectory) {
+      const rd = entry.createReader(); const all = [];
+      const step = () => rd.readEntries(async es => {
+        if (!es.length) { for (const e of all) await walkEntry(e, path + entry.name + '/', out); return res(); }
+        all.push(...es); step();
+      }, res);
+      step();
+    } else res();
+  });
+}
+
+function wireDrop(zoneSel, kind, labelSel) {
+  const z = $(zoneSel);
+  z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('hot'); });
+  z.addEventListener('dragleave', () => z.classList.remove('hot'));
+  z.addEventListener('drop', async e => {
+    e.preventDefault(); z.classList.remove('hot');
+    const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    const out = [];
+    for (const it of items) await walkEntry(it, '', out);
+    await accept(kind, out, labelSel);
+  });
+  z.onclick = () => {                       // fallback: folder picker
+    const inp = document.createElement('input');
+    inp.type = 'file'; inp.webkitdirectory = true; inp.multiple = true;
+    inp.onchange = () => accept(kind, [...inp.files].filter(f => KEEP(f.name))
+      .map(f => ({file: f, rel: f.webkitRelativePath || f.name})), labelSel);
+    inp.click();
+  };
+}
+
+// A browser never hands over an absolute path, so a drop is uploaded straight away and the
+// server turns it back into one — the real ~/.claude/projects file when it is the same session,
+// otherwise the uploaded copy. Either way the path box ends up filled in and stays editable.
+async function accept(kind, files, labelSel) {
+  if (!files.length) { setStatus('nothing usable there (need .jsonl / .meta.json)', true); return; }
+  uploads[kind] = files;
+  if (kind === 'log') { picked = []; }
+  const bytes = files.reduce((a, o) => a + o.file.size, 0);
+  $(labelSel).textContent = files.length + ' files · ' + fmtSize(bytes);
+  try {
+    await upload(kind);
+    const d = await (await fetch('/api/resolve', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({job: jobId, kind: kind})})).json();
+    if (d.error) throw new Error(d.error);
+    $('#pathLog').value = (d.paths || []).join('\n');
+    say(d.local ? 'matched to the local session file' : 'using the uploaded copy');
+    autoDetectProject();
+    uploads[kind] = [];                     // already on the server; Run just uses the path
+    setProgress(1, 'ready');
+    setStatus('');
+  } catch (err) {
+    setStatus('upload failed: ' + (err.message || err), true);
+  }
+}
+wireDrop('#dropLog', 'log', '#pickedLog');
+
+// ---------- smart linking (session ⇄ project folder) ----------
+// The transcript records the cwd the run happened in, so the project folder can be walked up
+// to from there; the reverse works because Claude Code names its project dir after that path.
+let projectTouched = false;
+$('#pathPipe').addEventListener('input', () => { projectTouched = true; $('#pipeNote').textContent = ''; });
+let detectT; $('#pathLog').addEventListener('input', () => { clearTimeout(detectT); detectT = setTimeout(autoDetectProject, 500); });
+
+async function autoDetectProject(manual) {
+  const paths = ($('#pathLog').value.split('\n').map(s => s.trim()).filter(Boolean).length
+    ? $('#pathLog').value.split('\n').map(s => s.trim()).filter(Boolean) : picked);
+  if (!paths.length) { if (manual) $('#pipeNote').textContent = 'pick or paste a session first'; return; }
+  if (!manual && projectTouched && $('#pathPipe').value.trim()) return;
+  $('#pipeNote').textContent = 'looking for the project folder…';
+  try {
+    const d = await (await fetch('/api/detect?paths=' + encodeURIComponent(paths.join('\n')))).json();
+    if (d.project) {
+      $('#pathPipe').value = d.project; projectTouched = false;
+      $('#pipeNote').textContent = 'auto-detected from the session cwd — edit to override';
+    } else {
+      $('#pipeNote').textContent = d.note || 'not found — fill it in if you have the folder';
+    }
+  } catch (e) { $('#pipeNote').textContent = 'detect failed: ' + e; }
+}
+
+$('#detectBtn').onclick = () => { projectTouched = false; autoDetectProject(true); };
+
+$('#matchBtn').onclick = async () => {
+  const eng = $('#pathPipe').value.trim();
+  if (!eng) { setStatus('type the project folder first', true); return; }
+  $('#logNote').textContent = 'searching sessions for that folder…';
+  try {
+    const d = await (await fetch('/api/match?project=' + encodeURIComponent(eng))).json();
+    const want = new Set(d.sessions || []);
+    const rows = [...document.querySelectorAll('.srow')];
+    rows.forEach(r => r.classList.toggle('on', want.has(r.dataset.path)));
+    picked = rows.filter(r => r.classList.contains('on')).map(r => r.dataset.path);
+    const missing = (d.sessions || []).length - picked.length;
+    $('#logNote').textContent = picked.length
+      ? picked.length + ' session(s) of this folder ticked above' + (missing ? ' (' + missing + ' not in the list)' : '')
+      : 'no session recorded for that folder on this machine';
+    if (picked.length) { $('#pathLog').value = ''; uploads.log = []; $('#pickedLog').textContent = ''; }
+    if (picked.length) document.querySelector('.srow.on').scrollIntoView({block: 'center'});
+  } catch (e) { $('#logNote').textContent = 'match failed: ' + e; }
+};
+
+
+// ---------- progress ticker + confetti ----------
+const TICK = ['reading the transcript…', 'summing per-message token usage…', 'walking the sub-agent logs…',
+  'grouping agents by type…', 'segmenting the activity blocks…', 'building the flow timeline…',
+  'measuring the parallel lanes…', 'rendering the report…'];
+let tickT = null, tickI = 0;
+const say = txt => { $('#ticker').innerHTML = '<span id="tickerTxt"></span>'; $('#tickerTxt').textContent = txt; };
+function ticker(on, msg) {
+  const bar = $('#barWrap');
+  clearInterval(tickT); tickT = null;
+  bar.classList.toggle('busy', !!on);
+  if (on) {
+    bar.classList.remove('done');
+    const step = () => say(TICK[tickI++ % TICK.length]);
+    step(); tickT = setInterval(step, 2200);
+  } else if (msg) say(msg);
+}
+function setProgress(frac, label) {          // determinate (uploads)
+  $('#barWrap').classList.remove('busy', 'done');
+  $('#bar').style.width = (frac * 100).toFixed(1) + '%';
+  if (label) say(label);
+}
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+  const cols = ['#3457d5', '#2fa876', '#d68420', '#e14a67', '#6b5cf0', '#2bc0d0'];
+  for (let i = 0; i < 90; i++) {
+    const d = document.createElement('i');
+    d.className = 'conf';
+    d.style.left = Math.random() * 100 + 'vw';
+    d.style.background = cols[i % cols.length];
+    d.style.setProperty('--spin', (Math.random() * 1080 - 540) + 'deg');
+    d.style.animation = 'fall ' + (2.2 + Math.random() * 1.6) + 's cubic-bezier(.25,.6,.5,1) ' +
+                        (Math.random() * .5) + 's forwards';
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 4600);
+  }
+}
+
+// ---------- run ----------
+function setStatus(msg, bad) { const s = $('#status'); s.textContent = msg || ''; s.className = bad ? 'err' : ''; }
+
+async function upload(kind) {
+  const files = uploads[kind];
+  let done = 0;
+  for (const o of files) {
+    await fetch('/api/upload?job=' + jobId + '&rel=' + encodeURIComponent(kind + '/' + o.rel),
+                {method: 'PUT', body: o.file});
+    done++;
+    setProgress(done / files.length, 'uploading ' + kind + ' — ' + done + '/' + files.length + ' files');
+  }
+}
+
+$('#run').onclick = async () => {
+  const btn = $('#run'); btn.disabled = true; $('#log').hidden = true; $('#kv').innerHTML = '';
+  $('#openBtn').hidden = true;
+  jobId = job();
+  const typed = $('#pathLog').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const paths = typed.length ? typed : picked;
+  try {
+    if (!paths.length) throw new Error('pick a session, drop a log folder, or paste a path');
+    setProgress(0, 'starting…');
+    ticker(true);
+    setStatus('analyzing…');
+    const r = await fetch('/api/run', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({job: jobId, paths: paths})});
+    const d = await r.json();
+    $('#log').hidden = false; $('#log').textContent = (d.log || d.error || '').trim();
+    if (!d.ok) { ticker(false, 'failed'); setStatus(d.error || 'analysis failed', true); return; }
+    ticker(false, 'report ready' + (d.sessions > 1 ? ' — ' + d.sessions + ' sessions merged' : ''));
+    $('#barWrap').classList.add('done');
+    const m = d.meta || {};
+    $('#kv').innerHTML = [
+      ['session', m.session], ['sub-agents', m.n_subagents], ['main-thread msgs', m.n_main_assistant],
+      m.grand_total ? ['tokens', (m.grand_total.total / 1e6).toFixed(1) + 'M'] : null,
+    ].filter(Boolean).map(([k, v]) => `<span class="tag">${k}: <b>${v}</b></span>`).join('');
+    const ob = $('#openBtn'); ob.hidden = false; ob.onclick = () => window.open(d.url, '_blank');
+    setStatus(d.file);
+    confetti();
+  } catch (e) {
+    ticker(false, 'stopped'); setStatus(e.message || String(e), true);
+  } finally { btn.disabled = false; }
+};
+
+$('#reset').onclick = () => {
+  picked = []; uploads = {log: []}; projectTouched = false;
+  $('#pipeNote').textContent = ''; $('#logNote').textContent = '';
+  $('#pathLog').value = ''; $('#pathPipe').value = '';
+  $('#pickedLog').textContent = '';
+  document.querySelectorAll('.srow').forEach(x => x.classList.remove('on'));
+  $('#kv').innerHTML = ''; $('#log').hidden = true; $('#openBtn').hidden = true;
+  setProgress(0, 'idle — pick a session and press Run'); $('#barWrap').classList.remove('done');
+  setStatus('');
+};
+</script>
+</body>
+</html>

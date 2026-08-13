@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+# generated output — a report contains your session content, never commit one
+report.html
+report-data.json
+viewdata.json
+out/
+.DS_Store
