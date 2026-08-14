@@ -126,7 +126,8 @@ is a static page that reads your file with the File API and analyses it in the t
 
 ## Repository layout
 
-`main` holds everything — the local tool and the static site that is deployed from `web/`.
+Single branch, two entry points: the Python tool at the root, and the static site under `web/`
+(that folder is the deploy root, so a push to `main` publishes it).
 
 | Path | Role |
 |---|---|
