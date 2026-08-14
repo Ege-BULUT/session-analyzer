@@ -32,59 +32,44 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/launcher.png" alt="The local launcher: pick sessions, merge them, run the analysis" width="860">
+  <img src="web/img/landing.png" alt="Drop a session log and get the whole picture" width="860">
 </p>
 
 ---
 
-## Two ways to run it
+## Try it
 
-**Locally** — this branch. One Python file, no dependencies, nothing leaves the machine:
+**[agent-session-report.vercel.app](https://agent-session-report.vercel.app)** — drop a session log,
+read the report. The analysis runs **in your browser**: the file is never uploaded, and the site has
+no backend to upload it to.
+
+Prefer to keep it local? The same analyzer is a single Python file with no dependencies, and it
+comes with a session picker:
 
 ```bash
-python3 serve_report.py     # session picker at http://127.0.0.1:8799
+python3 serve_report.py                  # session picker at http://127.0.0.1:8799
+python3 analyze_and_report.py            # or straight to a report, no UI
+python3 analyze_and_report.py --list     # what is available here
 ```
 
-**In a browser** — **[agent-session-report.vercel.app](https://agent-session-report.vercel.app)**.
-Drop a session log on the page; the analysis runs in your tab, with no upload and no backend.
-That build lives on the [`web`](../../tree/web) branch.
+<p align="center">
+  <img src="web/img/launcher.png" alt="The local launcher: pick sessions, merge them, run the analysis" width="860">
+</p>
+
+In the launcher: tick a session (read from `~/.claude/projects`) or drag a copied log folder in;
+ticking several **merges them into one report**. Sort by the `agents` / `size` / `last edited`
+headers, shift-click for a range, or drag a selection box over the rows —
+<kbd>ctrl</kbd>/<kbd>cmd</kbd> while dragging deselects. The **Project folder** box finds sessions
+in both directions: it fills in from the session you pick, and its button goes the other way.
 
 Curious first? Open the **[sample report](https://agent-session-report.vercel.app/demo-report)** —
 built from a synthetic session, so it shows everything without publishing anyone's transcript.
-Every screenshot below comes from it.
+Every screenshot in this README comes from it.
 
-## The launcher
-
-1. Tick a session in the list (read from `~/.claude/projects`), or drag a copied log folder /
-   `.jsonl` onto the drop zone. Ticking several **merges them into one report** — what you want when
-   a piece of work spanned `/resume`s, a crash, or several days.
-2. Press **Run analysis**, then **Open the report ↗**.
-
-The **Project folder** box is a shortcut for finding sessions in both directions: it fills in from the
-session you pick (read from the `cwd` the transcript recorded), and the button on the left goes the
-other way — type a folder, get its sessions ticked.
-
-List tips: click the `agents` / `size` / `last edited` headers to sort (click again to flip), click a
-row to toggle, shift-click for a range, or drag a selection box over the rows — hold
-<kbd>ctrl</kbd>/<kbd>cmd</kbd> while dragging to deselect instead.
-
-## Or straight from the command line
-
-```bash
-python3 analyze_and_report.py                 # busiest session of the current folder's project
-python3 analyze_and_report.py <session-uuid>  # one specific session
-python3 analyze_and_report.py a.jsonl b.jsonl # several sessions, merged into one report
-python3 analyze_and_report.py --list          # what is available for this folder
-python3 analyze_and_report.py --out ./out     # where to write (default: next to the script)
-```
-
-Three files come out: `report.html` (open this), plus `report-data.json` and `viewdata.json` — the
-raw aggregates, if you want to chart them somewhere else.
-
-## What the report shows
+## What you get
 
 <p align="center">
-  <img src="docs/img/report-overview.png" alt="KPI tiles and the token/time chart" width="860">
+  <img src="web/img/report-overview.png" alt="KPI tiles and the token/time chart" width="860">
 </p>
 
 - **Tokens, split by actor** — the main thread and each sub-agent type, switchable between processed
@@ -95,7 +80,7 @@ raw aggregates, if you want to chart them somewhere else.
 - **The parallel-agent flow** — concurrency lanes, agent count, tokens on the same axis, one row per actor.
 
 <p align="center">
-  <img src="docs/img/report-timeline.png" alt="Flow timeline with parallel lanes and concurrency" width="860">
+  <img src="web/img/report-timeline.png" alt="Flow timeline with parallel lanes and concurrency" width="860">
 </p>
 
 - **Every task as a row** — description, type, model, start–end, duration, turns, tokens; sortable and
@@ -104,12 +89,12 @@ raw aggregates, if you want to chart them somewhere else.
   commands were typed.
 
 <p align="center">
-  <img src="docs/img/report-tasks.png" alt="Per-task table grouped by agent type" width="860">
+  <img src="web/img/report-tasks.png" alt="Per-task table grouped by agent type" width="860">
 </p>
 
 ## Languages
 
-**EN · 中文 · TR** — the launcher and every generated report ship in all three, switchable in the
+**EN · 中文 · TR** — the interface and every generated report ship in all three, switchable in the
 top-left corner, and the choice is remembered.
 
 <sub><i>Other languages are welcome — a translation is one entry in the `T` table of
@@ -122,43 +107,50 @@ top-left corner, and the choice is remembered.
 | processed tokens | `input + cache-creation + cache-read + output`, from the `usage` field of every assistant message |
 | generated | output tokens only — what the model actually wrote |
 | new input | `input + cache-creation` — context paid for at full price |
-| sub-agents | one per `*.meta.json` under `<session-uuid>/subagents/`, with tokens from its own transcript |
+| sub-agents | one per `*.meta.json` under `<session>/subagents/`, with tokens from its own transcript |
 | grouping | one group per agent type; the main thread is its own group, never folded into another |
 | ① wall-clock | first timestamp to last |
 | ② active wall-clock | the same span minus idle gaps longer than 20 minutes |
 | ③ agent work-hours | every sub-agent's duration summed (parallel included) + the main thread's active span |
 
 ③ being larger than ② is not a bug: ten agents working an hour in parallel are one hour of calendar
-time and ten hours of agent work. Cache-read usually dominates the processed total — long context is
-re-read every turn, which is expected and cheap; switch the metric to **Generated** or **New input**
-for the real load.
+time and ten hours of agent work. Full detail in the [docs](https://agent-session-report.vercel.app/docs).
 
 ## Privacy
 
-Everything runs on your machine: the launcher binds to `127.0.0.1`, the report is a local HTML file,
-and nothing is uploaded anywhere.
+Nothing is uploaded, anywhere, in either version — the CLI is local by definition, and the web build
+is a static page that reads your file with the File API and analyses it in the tab.
 
 > A generated report **contains your session**: task descriptions, typed commands, the first line of
 > your prompts. Treat `report.html` like the transcript it came from before sharing it.
 
-## Files
+## Repository layout
+
+`main` holds everything — the local tool and the static site that is deployed from `web/`.
 
 | Path | Role |
 |---|---|
-| `analyze_and_report.py` | the analyzer and the report renderer — runs standalone, stdlib only |
+| `analyze_and_report.py` | the analyzer and the report renderer — standalone, stdlib only |
 | `serve_report.py` | local launcher: session list, drag-and-drop, calls the analyzer |
-| `index.html` | the launcher page |
+| `web/analyze.js` | the browser port of the aggregation |
+| `web/report-assets.js` | **generated** — the renderer, compiled out of the Python file |
+| `build_web.py` | regenerates `web/report-assets.js` |
+| `tests/conformance.mjs` | runs both analyzers over one transcript and fails on any difference |
 | `tools/demo_session.py` | builds the synthetic session behind the sample report |
-| `tools/launcher_shot.py` | screenshots the launcher against a fake `HOME`, never a real session list |
+| `tools/screenshots.py`, `tools/launcher_shot.py` | regenerate the images used here |
+| `web/vercel.json` | static-site config: clean URLs and a strict Content-Security-Policy |
 
-## Troubleshooting
+## Development
 
-- **The list is empty** — no logs under `~/.claude/projects` on this machine. Drag a copied log
-  folder in instead.
-- **The project folder is not detected** — the session ran on another machine, so the path recorded
-  in the transcript does not exist here. Type it in, or ignore it.
-- **Port already in use** — the launcher walks up from 8799 until a port is free and prints the
-  address it picked. `PORT=9000 python3 serve_report.py` overrides it.
+```bash
+python3 build_web.py                        # renderer -> web/report-assets.js
+python3 -m http.server -d web 8815          # try the site locally
+node tests/conformance.mjs <session.jsonl>  # JS and Python must agree, field for field
+python3 tools/demo_session.py               # rebuild the sample report
+```
+
+The renderer has exactly one source (`analyze_and_report.py`); the aggregation has two (Python and
+JS), and the conformance test is what keeps them honest. Run it after touching either side.
 
 ## License
 

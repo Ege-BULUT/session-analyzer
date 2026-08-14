@@ -11,7 +11,7 @@ import json, os, random, subprocess, sys, tempfile, datetime as dt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-OUT = os.path.join(ROOT, "docs")
+OUT = os.path.join(ROOT, 'web')
 T0 = dt.datetime(2026, 3, 12, 9, 0, tzinfo=dt.timezone.utc)      # fixed: same demo every run
 RNG = random.Random(7)
 

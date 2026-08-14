@@ -12,7 +12,7 @@ import json, os, re, shutil, subprocess, sys, tempfile, time, datetime as dt
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-OUT = os.path.join(ROOT, 'docs', 'img')
+OUT = os.path.join(ROOT, 'web', 'img')
 PORT = '8831'
 CHROME = os.environ.get('CHROME', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
 
