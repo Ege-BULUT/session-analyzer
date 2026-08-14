@@ -12,7 +12,7 @@ is no backend. Or run the same analyzer locally from the command line.
   <img src="web/img/landing.png" alt="The analyzer page: drop a session log, or pick the .jsonl" width="820">
 </p>
 
-Every screenshot below comes from the [sample report](https://agent-session-report.vercel.app/demo-report.html),
+Every screenshot below comes from the [sample report](https://agent-session-report.vercel.app/demo-report),
 which is generated from a synthetic session (`tools/demo_session.py`) — no real transcript is published.
 
 Deterministic and offline — it reads the JSONL transcript the CLI already wrote, sums the
