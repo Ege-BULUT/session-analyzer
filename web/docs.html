@@ -43,6 +43,9 @@ h3{font-size:15px;margin:26px 0 6px}
 p,li{color:var(--ink)}
 .lead{color:var(--ink2);font-size:16px;max-width:62ch}
 a{color:var(--accent)}
+figure{margin:22px 0}
+figure img{width:100%;display:block;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+figcaption{font-size:12.5px;color:var(--ink2);margin-top:8px;text-align:center}
 table{width:100%;border-collapse:collapse;font-size:14px;margin:14px 0}
 th{text-align:left;font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.06em;
   text-transform:uppercase;color:var(--ink2);border-bottom:1px solid var(--line);padding:8px 10px}
@@ -79,6 +82,9 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
   <p class="lead">session-analyzer turns the transcript Claude Code already wrote on your machine
     into one self-contained HTML report. It is a plain read of that file: no model calls, no
     estimates, no network.</p>
+  <p class="lead" style="margin-top:10px">Every screenshot on this page comes from the
+    <a href="/demo-report.html" target="_blank" rel="noopener">sample report</a>, built from a
+    synthetic session — no real transcript is published here.</p>
 
   <div class="toc">
     <b style="font-size:13px">On this page</b>
@@ -107,6 +113,10 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
   <p>On Windows the same tree lives under <code>%USERPROFILE%\.claude\projects\</code>.</p>
 
   <h2 id="use">Using the web version</h2>
+  <figure>
+    <img src="/img/landing.png" alt="The analyzer page with its drop zone and file pickers" loading="lazy">
+    <figcaption>Drop the folder, or pick the <code>.jsonl</code> directly. The report appears below it.</figcaption>
+  </figure>
   <ol>
     <li>Drag the session folder (or the <code>.jsonl</code>) onto the drop zone — or use
       <b>Choose .jsonl file(s)</b> / <b>Choose a folder</b>.</li>
@@ -121,6 +131,11 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
     and the analysis runs in your tab. The site is static — there is no backend to send anything to.</div>
 
   <h2 id="report">What the report shows</h2>
+  <figure>
+    <img src="/img/report-overview.png" alt="Report header with KPI tiles and the token/time chart" loading="lazy">
+    <figcaption>The header answers “what did this cost and how long did it take” in one glance;
+      the chart below it is draggable to zoom into any window.</figcaption>
+  </figure>
   <table>
     <tr><th>Section</th><th>What it answers</th></tr>
     <tr><td><b>Token consumption</b></td><td>Where the tokens went, split by actor — the main thread
@@ -138,6 +153,15 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
       start–end, duration, turns, tokens. Search with <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd>
       (regex supported).</td></tr>
   </table>
+  <figure>
+    <img src="/img/report-timeline.png" alt="Flow timeline with parallel lanes and concurrency count" loading="lazy">
+    <figcaption>The flow timeline: one bar per sub-agent in packed lanes, the concurrency count
+      underneath, and tokens over the same axis. Drag to select a window and read its totals.</figcaption>
+  </figure>
+  <figure>
+    <img src="/img/report-tasks.png" alt="Per-task table with model, duration and token columns" loading="lazy">
+    <figcaption>Every task as a row — grouped by agent type, sortable, searchable.</figcaption>
+  </figure>
   <p>The report is trilingual — <b>English · Türkçe · 简体中文</b>, switchable top-left — and follows
     your light/dark theme.</p>
 
@@ -161,6 +185,11 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
     <tr><td>activity block</td><td>a run of work with no 20-minute gap in it. Blocks are what the
       hourly-flow section lists.</td></tr>
   </table>
+  <figure>
+    <img src="/img/report-tokens.png" alt="Token consumption per actor: donut and per-actor bars" loading="lazy">
+    <figcaption>Token consumption by actor. The metric switch above the chart moves the pie and the
+      bars together, so “who burned the context” and “who wrote the most” are one click apart.</figcaption>
+  </figure>
   <div class="note"><b>③ is larger than ② — that is not a bug.</b> Ten agents working for an hour in
     parallel are one hour of calendar time and ten hours of agent work. The report keeps both because
     the first tells you how long you waited and the second tells you how much work happened.</div>

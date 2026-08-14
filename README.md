@@ -8,11 +8,22 @@ the work really took, what every sub-agent did, and an hour-by-hour timeline of 
 Drop a session log on the site and the analysis runs in your own tab — nothing is uploaded, there
 is no backend. Or run the same analyzer locally from the command line.
 
+<p align="center">
+  <img src="web/img/landing.png" alt="The analyzer page: drop a session log, or pick the .jsonl" width="820">
+</p>
+
+Every screenshot below comes from the [sample report](https://agent-session-report.vercel.app/demo-report.html),
+which is generated from a synthetic session (`tools/demo_session.py`) — no real transcript is published.
+
 Deterministic and offline — it reads the JSONL transcript the CLI already wrote, sums the
 `usage` fields, and renders a single file. No model calls, no telemetry, no network.
 Standard library only, Python 3.8+.
 
 ## What the report shows
+
+<p align="center">
+  <img src="web/img/report-overview.png" alt="Report header: KPI tiles and the token/time chart" width="820">
+</p>
 
 - **Tokens** — processed total, generated output, new input, cache-read, split per actor
   (the main thread and each sub-agent type) with an interactive pie/bar you can switch metrics on.
@@ -22,10 +33,18 @@ Standard library only, Python 3.8+.
 - **Token spend over time** — a zoomable time-series; drag to select a range.
 - **Parallel-agent flow timeline** — lanes showing what ran concurrently, concurrent-agent count,
   tokens over time, and one row per actor.
+
+<p align="center">
+  <img src="web/img/report-timeline.png" alt="Flow timeline: parallel lanes, agent count, tokens over time" width="820">
+</p>
 - **Every task, one row** — description, type, model, start–end, duration, turns and tokens,
   searchable (regex supported) and sortable.
 - **Activity blocks** — the run split on 20-minute idle gaps, each with what was spawned and
   the commands typed.
+
+<p align="center">
+  <img src="web/img/report-tasks.png" alt="Per-task table: description, model, duration, tokens" width="820">
+</p>
 
 Interface and report are trilingual: **English · Türkçe · 简体中文** (switch top-left, the
 report remembers your choice). Light and dark themes follow the browser.

@@ -18,6 +18,7 @@
   --good:#43c48f; --crit:#f0687f; --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
 }}
 *{box-sizing:border-box}
+[hidden]{display:none !important}
 body{margin:0;background:var(--bg);color:var(--ink);line-height:1.55;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace}
@@ -52,6 +53,9 @@ button{font:inherit;border:0;border-radius:10px;padding:11px 20px;cursor:pointer
 button:hover:not(:disabled){transform:scale(1.03)}
 button:disabled{opacity:.45;cursor:default}
 button.ghost{background:var(--surface2);color:var(--ink2);border:1px solid var(--line);font-weight:500}
+.btnlink{display:inline-flex;align-items:center;text-decoration:none;font-size:inherit;
+  border-radius:10px;padding:11px 20px;transition:transform .15s}
+.btnlink:hover{transform:scale(1.03)}
 .bar{height:6px;border-radius:4px;background:var(--surface2);overflow:hidden;margin-top:16px;position:relative}
 .bar i{display:block;height:100%;width:0;background:var(--accent)}
 .bar.busy i{width:100%;background:linear-gradient(90deg,transparent,var(--accent),transparent);
@@ -106,6 +110,8 @@ a{color:var(--accent)}
       <div class="pickrow">
         <button id="pickFile">Choose .jsonl file(s)</button>
         <button class="ghost" id="pickDir">Choose a folder</button>
+        <a class="ghost btnlink" href="/demo-report.html" target="_blank" rel="noopener"
+           onclick="event.stopPropagation()">See a sample report ↗</a>
       </div>
     </div>
     <div class="bar" id="bar"><i></i></div>
