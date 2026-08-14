@@ -3,6 +3,7 @@
 """Drag-and-drop launcher for analyze_and_report.py.
 
     python3 serve_report.py            # opens http://127.0.0.1:8799 in the browser
+    python3 serve_report.py --no-open  # same, without launching a browser
 
 The page lets you pick sessions Claude Code already stored on this machine
 (~/.claude/projects), or drag in a copied log folder / .jsonl. Pressing Run executes
@@ -382,7 +383,8 @@ def main():
     url = 'http://127.0.0.1:%d/' % port
     print('session-report UI  ->', url)
     print('work dir:', WORK, '(cleared on start)')
-    threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+    if '--no-open' not in sys.argv:
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

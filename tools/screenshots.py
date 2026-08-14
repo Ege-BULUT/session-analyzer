@@ -80,11 +80,19 @@ def main():
     class Q(http.server.SimpleHTTPRequestHandler):
         def log_message(self, *a): pass
     handler = lambda *a, **k: Q(*a, directory=WEB, **k)
-    srv = socketserver.TCPServer(('127.0.0.1', PORT), handler)
-    srv.allow_reuse_address = True
+    socketserver.TCPServer.allow_reuse_address = True     # must be set before bind
+    port = PORT
+    for _ in range(20):
+        try:
+            srv = socketserver.TCPServer(('127.0.0.1', port), handler)
+            break
+        except OSError:
+            port += 1
+    else:
+        sys.exit('no free port near %d' % PORT)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     time.sleep(0.5)
-    base = 'http://127.0.0.1:%d' % PORT
+    base = 'http://127.0.0.1:%d' % port
 
     # section shots: (file, css selector inside the report, extra scroll-up, height)
     sections = [

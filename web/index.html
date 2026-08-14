@@ -76,8 +76,16 @@ iframe{width:100%;height:min(82vh,1100px);border:1px solid var(--line);border-ra
   background:var(--surface);box-shadow:var(--shadow);margin-top:22px}
 .foot{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink2);font-size:13px}
 a{color:var(--accent)}
-.priv{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--good);
-  border:1px solid color-mix(in srgb,var(--good) 40%,transparent);border-radius:999px;padding:5px 12px}
+.priv{display:inline-flex;align-items:center;gap:10px;color:var(--good);
+  border:1px solid color-mix(in srgb,var(--good) 42%,transparent);border-radius:999px;
+  padding:8px 16px;background:color-mix(in srgb,var(--good) 9%,transparent)}
+.priv b{font-size:15.5px;font-weight:800;letter-spacing:-.01em;text-transform:none}
+.priv .shield{flex:none;display:block}
+.priv .privtxt{font-size:13.5px;color:color-mix(in srgb,var(--good) 78%,var(--ink))}
+@media(max-width:520px){.priv{align-items:flex-start;flex-wrap:wrap;border-radius:14px}}
+.langline{margin:12px 0 0;font-size:13px;color:var(--ink2)}
+.langline b{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;letter-spacing:.04em;color:var(--ink)}
+.langline i{font-size:12px;color:color-mix(in srgb,var(--ink2) 78%,transparent)}
 </style>
 </head>
 <body>
@@ -99,7 +107,20 @@ a{color:var(--accent)}
   <p class="sub">Token spend per actor, three separate time measures, the parallel-agent flow
     timeline, and every sub-agent task as a searchable row — from the transcript Claude Code
     already wrote on your machine.</p>
-  <p style="margin-top:14px"><span class="priv">🔒 Runs in your browser — the file never leaves it</span></p>
+  <p style="margin-top:16px"><span class="priv">
+    <b>Privacy First</b>
+    <svg class="shield" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="verified">
+      <path d="M12 2.2 4.6 5.1v6.2c0 4.7 3.1 8.4 7.4 10.5 4.3-2.1 7.4-5.8 7.4-10.5V5.1L12 2.2Z"
+            fill="currentColor" opacity=".16"/>
+      <path d="M12 2.2 4.6 5.1v6.2c0 4.7 3.1 8.4 7.4 10.5 4.3-2.1 7.4-5.8 7.4-10.5V5.1L12 2.2Z"
+            fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      <path d="m8.4 12.1 2.5 2.5 4.7-4.9" fill="none" stroke="currentColor" stroke-width="2.1"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="privtxt">Runs in your browser — the file never leaves it</span>
+  </span></p>
+  <p class="langline"><b>EN · 中文 · TR</b> — the interface and every report ship in three languages
+    <br><i>other languages welcome — contributions are open</i></p>
 
   <div class="card" id="panel">
     <div class="drop" id="drop">

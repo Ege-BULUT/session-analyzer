@@ -1,152 +1,148 @@
-# session-analyzer
-
-**[Try it in your browser →](https://agent-session-report.vercel.app)** · [Docs](https://agent-session-report.vercel.app/docs)
-
-Turn a Claude Code session into one self-contained HTML report: where the tokens went, how long
-the work really took, what every sub-agent did, and an hour-by-hour timeline of the run.
-
-Drop a session log on the site and the analysis runs in your own tab — nothing is uploaded, there
-is no backend. Or run the same analyzer locally from the command line.
+<h1 align="center">session-analyzer</h1>
 
 <p align="center">
-  <img src="web/img/landing.png" alt="The analyzer page: drop a session log, or pick the .jsonl" width="820">
+  <b>See where a Claude Code session actually went.</b><br>
+  Tokens per actor, three honest time measures, every sub-agent on a timeline — from the
+  transcript the CLI already wrote on your machine.
 </p>
-
-Every screenshot below comes from the [sample report](https://agent-session-report.vercel.app/demo-report),
-which is generated from a synthetic session (`tools/demo_session.py`) — no real transcript is published.
-
-Deterministic and offline — it reads the JSONL transcript the CLI already wrote, sums the
-`usage` fields, and renders a single file. No model calls, no telemetry, no network.
-Standard library only, Python 3.8+.
-
-## What the report shows
 
 <p align="center">
-  <img src="web/img/report-overview.png" alt="Report header: KPI tiles and the token/time chart" width="820">
+  <a href="https://agent-session-report.vercel.app"><img alt="Live on the web"
+     src="https://img.shields.io/badge/live%20on%20the%20web-agent--session--report.vercel.app-2fa876?style=flat-square&logo=vercel&logoColor=white"></a>
+  <a href="https://agent-session-report.vercel.app/docs"><img alt="Docs"
+     src="https://img.shields.io/badge/docs-read-3457d5?style=flat-square&logo=readthedocs&logoColor=white"></a>
+  <a href="https://agent-session-report.vercel.app/demo-report"><img alt="Sample report"
+     src="https://img.shields.io/badge/sample-report-6b5cf0?style=flat-square"></a>
 </p>
-
-- **Tokens** — processed total, generated output, new input, cache-read, split per actor
-  (the main thread and each sub-agent type) with an interactive pie/bar you can switch metrics on.
-- **Time, three ways** — wall-clock, active wall-clock (idle removed), and agent work-hours
-  (parallel agents summed separately). Mixing these three up is the usual way session numbers
-  get misread, so the report keeps them apart and explains the gap.
-- **Token spend over time** — a zoomable time-series; drag to select a range.
-- **Parallel-agent flow timeline** — lanes showing what ran concurrently, concurrent-agent count,
-  tokens over time, and one row per actor.
 
 <p align="center">
-  <img src="web/img/report-timeline.png" alt="Flow timeline: parallel lanes, agent count, tokens over time" width="820">
+  <img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-3776ab?style=flat-square&logo=python&logoColor=white">
+  <img alt="Dependencies: none" src="https://img.shields.io/badge/dependencies-none-2fa876?style=flat-square">
+  <img alt="Network: never" src="https://img.shields.io/badge/network-never-141d2b?style=flat-square">
+  <img alt="Languages: EN, 中文, TR" src="https://img.shields.io/badge/i18n-EN%20%C2%B7%20%E4%B8%AD%E6%96%87%20%C2%B7%20TR-d68420?style=flat-square">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square"></a>
 </p>
-- **Every task, one row** — description, type, model, start–end, duration, turns and tokens,
-  searchable (regex supported) and sortable.
-- **Activity blocks** — the run split on 20-minute idle gaps, each with what was spawned and
-  the commands typed.
 
 <p align="center">
-  <img src="web/img/report-tasks.png" alt="Per-task table: description, model, duration, tokens" width="820">
+  <img alt="Stars" src="https://img.shields.io/github/stars/Ege-BULUT/session-analyzer?style=flat-square">
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/Ege-BULUT/session-analyzer?style=flat-square">
+  <img alt="Code size" src="https://img.shields.io/github/languages/code-size/Ege-BULUT/session-analyzer?style=flat-square">
+  <img alt="Top language" src="https://img.shields.io/github/languages/top/Ege-BULUT/session-analyzer?style=flat-square">
+  <img alt="Visitors" src="https://visitor-badge.laobi.icu/badge?page_id=Ege-BULUT.session-analyzer&style=flat-square">
 </p>
 
-Interface and report are trilingual: **English · Türkçe · 简体中文** (switch top-left, the
-report remembers your choice). Light and dark themes follow the browser.
+<p align="center">
+  <img src="web/img/landing.png" alt="Drop a session log and get the whole picture" width="860">
+</p>
 
-## Use it
+---
+
+## Try it
+
+**[agent-session-report.vercel.app](https://agent-session-report.vercel.app)** — drop a session log,
+read the report. The analysis runs **in your browser**: the file is never uploaded, and the site has
+no backend to upload it to.
+
+Prefer the terminal? The same analyzer is a single Python file with no dependencies:
 
 ```bash
-python3 serve_report.py
+python3 analyze_and_report.py            # busiest session of the current folder's project
+python3 analyze_and_report.py --list     # what is available here
 ```
 
-Your browser opens on `http://127.0.0.1:8799`:
+Curious first? Open the **[sample report](https://agent-session-report.vercel.app/demo-report)** —
+built from a synthetic session, so it shows everything without publishing anyone's transcript.
+Every screenshot in this README comes from it.
 
-1. Tick a session in the list (read from `~/.claude/projects`), or drag a copied log folder /
-   `.jsonl` onto the drop zone. Ticking several **merges them into one report** — useful when a
-   piece of work spanned `/resume`s or several days.
-2. Press **Run analysis**, then **Open the report ↗**.
+## What you get
 
-The **Project folder** box is only a shortcut for finding sessions: it fills in from the session
-you pick (read from the `cwd` the transcript recorded), and the button on the left goes the other
-way — type a folder, get its sessions ticked.
+<p align="center">
+  <img src="web/img/report-overview.png" alt="KPI tiles and the token/time chart" width="860">
+</p>
 
-List tips: click the `agents` / `size` / `last edited` headers to sort (click again to flip),
-click a row to toggle, shift-click for a range, or drag a selection box over the rows — hold
-<kbd>ctrl</kbd>/<kbd>cmd</kbd> while dragging to deselect instead.
+- **Tokens, split by actor** — the main thread and each sub-agent type, switchable between processed
+  total, generated output, new input and cache-read.
+- **Three time measures, kept apart** — wall-clock, active wall-clock (idle removed), and agent
+  work-hours (parallel agents summed separately). Conflating these is how session numbers get misread.
+- **Token spend over time** — drag the chart to zoom into any window and read its totals.
+- **The parallel-agent flow** — concurrency lanes, agent count, tokens on the same axis, one row per actor.
 
-## Or from the command line
+<p align="center">
+  <img src="web/img/report-timeline.png" alt="Flow timeline with parallel lanes and concurrency" width="860">
+</p>
 
-```bash
-python3 analyze_and_report.py                     # busiest session of the current folder's project
-python3 analyze_and_report.py <session-uuid>      # one specific session
-python3 analyze_and_report.py a.jsonl b.jsonl     # several sessions, merged into one report
-python3 analyze_and_report.py --list              # what is available for this folder
-python3 analyze_and_report.py --out ./out         # where to write (default: next to the script)
-```
+- **Every task as a row** — description, type, model, start–end, duration, turns, tokens; sortable and
+  searchable with regex.
+- **Activity blocks** — the run split on 20-minute idle gaps, each listing what was spawned and which
+  commands were typed.
 
-Three files come out: `report.html` (open this), `report-data.json` (raw aggregates) and
-`viewdata.json` (the enriched view model). The JSON files are there so you can chart the numbers
-somewhere else.
+<p align="center">
+  <img src="web/img/report-tasks.png" alt="Per-task table grouped by agent type" width="860">
+</p>
+
+## Languages
+
+**EN · 中文 · TR** — the interface and every generated report ship in all three, switchable in the
+top-left corner, and the choice is remembered.
+
+<sub><i>Other languages are welcome — a translation is one entry in the `T` table of
+`analyze_and_report.py`; pull requests are open.</i></sub>
 
 ## How the numbers are produced
 
-| Number | Source |
+| Number | Definition |
 |---|---|
-| tokens | the `usage` field of every assistant message — main thread and every sub-agent transcript |
-| sub-agents | one `*.meta.json` per spawned agent under `<session-uuid>/subagents/` |
+| processed tokens | `input + cache-creation + cache-read + output`, from the `usage` field of every assistant message |
+| generated | output tokens only — what the model actually wrote |
+| new input | `input + cache-creation` — context paid for at full price |
+| sub-agents | one per `*.meta.json` under `<session>/subagents/`, with tokens from its own transcript |
 | grouping | one group per agent type; the main thread is its own group, never folded into another |
-| wall-clock | first to last timestamp |
-| active wall-clock | the same span minus idle gaps longer than 20 minutes |
-| agent work-hours | every sub-agent's own duration summed (parallel included) + the main thread's active span |
+| ① wall-clock | first timestamp to last |
+| ② active wall-clock | the same span minus idle gaps longer than 20 minutes |
+| ③ agent work-hours | every sub-agent's duration summed (parallel included) + the main thread's active span |
 
-Cache-read usually dominates the processed total — long context is re-read every turn. That is
-expected and cheap; switch the metric to **Generated** or **New input** for the real load.
-
-## The browser version (this branch)
-
-`web/` is a static, zero-backend build of the same tool, deployed at
-**[agent-session-report.vercel.app](https://agent-session-report.vercel.app)**: drop a session log
-on the page and the analysis runs **in the browser** — no upload, no server, no function.
-`web/docs.html` is the documentation page served at `/docs`.
-
-```bash
-python3 build_web.py                       # regenerate web/report-assets.js from the Python file
-python3 -m http.server -d web 8815         # try it locally → http://127.0.0.1:8815
-node tests/conformance.mjs <session.jsonl>  # prove the JS and Python analyzers agree
-```
-
-Two implementations, one truth:
-
-- the **report renderer** (shell, CSS, behaviour) has a single source — `analyze_and_report.py` —
-  and `build_web.py` compiles it into `web/report-assets.js`. Never edit that file by hand.
-- the **aggregation** exists twice (Python for the CLI, `web/analyze.js` for the browser), and
-  `tests/conformance.mjs` runs both over the same transcript and fails on any difference. Run it
-  after touching either side.
-
-Why not one shared backend API? The input is the user's full transcript — tens of megabytes of
-their own prompts and tool output. Shipping that to a server would break the one guarantee worth
-having (nothing leaves the machine), and it exceeds serverless request limits anyway. So the core
-runs where the data already is: on the user's machine, in the CLI or in their browser tab.
-
-## Files
-
-| File | Role |
-|---|---|
-| `analyze_and_report.py` | the analyzer and report renderer — runs standalone |
-| `serve_report.py` | local launcher: serves the page, calls the analyzer |
-| `index.html` | the launcher page |
+③ being larger than ② is not a bug: ten agents working an hour in parallel are one hour of calendar
+time and ten hours of agent work. Full detail in the [docs](https://agent-session-report.vercel.app/docs).
 
 ## Privacy
 
-Everything runs on your machine. The launcher binds to `127.0.0.1`, the report is a single local
-HTML file, and nothing is uploaded anywhere. Note that a report does contain the content of your
-session — task descriptions, typed commands, the first line of your prompts — so treat a
-generated `report.html` like the transcript it came from before sharing it.
+Nothing is uploaded, anywhere, in either version — the CLI is local by definition, and the web build
+is a static page that reads your file with the File API and analyses it in the tab.
 
-## Troubleshooting
+> A generated report **contains your session**: task descriptions, typed commands, the first line of
+> your prompts. Treat `report.html` like the transcript it came from before sharing it.
 
-- **The list is empty** — no logs under `~/.claude/projects` on this machine. Drag a copied log
-  folder in instead.
-- **The project folder is not detected** — the session ran on another machine, so the path in the
-  transcript does not exist here. Type it in, or ignore it.
-- **Port already in use** — the launcher walks up from 8799 until a port is free and prints the
-  address it picked. `PORT=9000 python3 serve_report.py` overrides it.
+## Repository layout
+
+| Branch | What lives there |
+|---|---|
+| `main` | the local tool: `analyze_and_report.py` (analyzer + renderer) and `serve_report.py` (session picker UI) |
+| `web` | everything in `main`, plus `web/` — the static browser build that gets deployed |
+
+Inside this branch:
+
+| Path | Role |
+|---|---|
+| `analyze_and_report.py` | the analyzer and the report renderer — standalone, stdlib only |
+| `serve_report.py` | local launcher: session list, drag-and-drop, calls the analyzer |
+| `web/analyze.js` | the browser port of the aggregation |
+| `web/report-assets.js` | **generated** — the renderer, compiled out of the Python file |
+| `build_web.py` | regenerates `web/report-assets.js` |
+| `tests/conformance.mjs` | runs both analyzers over one transcript and fails on any difference |
+| `tools/demo_session.py` | builds the synthetic session behind the sample report |
+| `tools/screenshots.py`, `tools/launcher_shot.py` | regenerate the images used here |
+
+## Development
+
+```bash
+python3 build_web.py                        # renderer -> web/report-assets.js
+python3 -m http.server -d web 8815          # try the site locally
+node tests/conformance.mjs <session.jsonl>  # JS and Python must agree, field for field
+python3 tools/demo_session.py               # rebuild the sample report
+```
+
+The renderer has exactly one source (`analyze_and_report.py`); the aggregation has two (Python and
+JS), and the conformance test is what keeps them honest. Run it after touching either side.
 
 ## License
 
