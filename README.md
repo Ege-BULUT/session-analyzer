@@ -85,8 +85,8 @@ Every screenshot in this README comes from it.
 
 - **Every task as a row** — description, type, model, start–end, duration, turns, tokens; sortable and
   searchable with regex.
-- **Activity blocks** — the run split on 20-minute idle gaps, each listing what was spawned and which
-  commands were typed.
+- **Activity blocks** — the run split on real idle gaps (no API call *and* no running sub-agent for
+  20 minutes) plus each fresh instruction, listing what was spawned and which commands were typed.
 
 <p align="center">
   <img src="web/img/report-tasks.png" alt="Per-task table grouped by agent type" width="860">
@@ -110,7 +110,7 @@ top-left corner, and the choice is remembered.
 | sub-agents | one per `*.meta.json` under `<session>/subagents/`, with tokens from its own transcript |
 | grouping | one group per agent type; the main thread is its own group, never folded into another |
 | ① wall-clock | first timestamp to last |
-| ② active wall-clock | the same span minus idle gaps longer than 20 minutes |
+| ② active wall-clock | the same span minus idle gaps: 20+ minutes with no API call and no running sub-agent |
 | ③ agent work-hours | every sub-agent's duration summed (parallel included) + the main thread's active span |
 
 ③ being larger than ② is not a bug: ten agents working an hour in parallel are one hour of calendar

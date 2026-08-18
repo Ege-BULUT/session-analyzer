@@ -178,11 +178,16 @@ kbd{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;border:1px solid v
     <tr><td>grouping</td><td>one group per agent type. The main thread is its own group and is never
       folded into another — it drives the whole run, so charging its spend to one type would be wrong.</td></tr>
     <tr><td>① wall-clock</td><td>first timestamp to last.</td></tr>
-    <tr><td>② active wall-clock</td><td>the same span minus idle gaps longer than 20 minutes.
+    <tr><td>② active wall-clock</td><td>the same span minus idle gaps: 20+ minutes in which no API
+      call was made and no sub-agent was running. A sub-agent working silently is NOT idle — the main
+      thread is blocked on it and writes nothing, which is why idle is measured over every call in the
+      run (main thread and sub-agents) plus each agent's whole span, not over main-thread gaps.
       Parallel agents count once — it is calendar time.</td></tr>
     <tr><td>③ agent work-hours</td><td>each sub-agent's own duration summed (parallel work counted
       separately) plus the main thread's active span.</td></tr>
-    <tr><td>activity block</td><td>a run of work with no 20-minute gap in it. Blocks are what the
+    <tr><td>activity block</td><td>one working stretch: activity merged across holes shorter than 20
+      minutes, so blocks are separated by the idle gaps above. A user turn that arrives after 20
+      minutes of user silence also starts a new block — it is a new instruction. Blocks are what the
       hourly-flow section lists.</td></tr>
   </table>
   <figure>

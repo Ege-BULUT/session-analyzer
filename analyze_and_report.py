@@ -38,6 +38,35 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.getcwd()                     # project = CWD (run from the repo you want to analyze)
 PROJECTS = os.path.join(os.path.expanduser('~'), '.claude', 'projects')
 
+def merge_iv(iv, gap=0):
+    """Merge intervals, absorbing holes up to `gap` seconds."""
+    out=[]
+    for a,b in sorted(iv):
+        if out and (a-out[-1][1]).total_seconds()<=gap:
+            if b>out[-1][1]: out[-1][1]=b
+        else: out.append([a,b])
+    return [(a,b) for a,b in out]
+
+def sub_iv(spans, cuts):
+    """spans minus cuts."""
+    out=[]
+    for a,b in spans:
+        cur=[(a,b)]
+        for ca,cb in cuts:
+            nxt=[]
+            for x,y in cur:
+                if cb<=x or ca>=y: nxt.append((x,y)); continue
+                if ca>x: nxt.append((x,ca))
+                if cb<y: nxt.append((cb,y))
+            cur=nxt
+        out+=[(x,y) for x,y in cur if y>x]
+    return out
+
+def idle_spans(t0, t1, covered, gap):
+    """The holes in [t0,t1] that nothing covers for longer than `gap` seconds. A shorter hole is
+    think-time inside a working stretch, not the user walking away."""
+    return [(a,b) for a,b in sub_iv([(t0,t1)], merge_iv(covered)) if (b-a).total_seconds()>gap]
+
 def encode_project(path):
     # Claude Code names a project dir after its abs path, non-alphanumerics -> '-'
     return re.sub(r'[^A-Za-z0-9]', '-', os.path.abspath(path))
@@ -234,36 +263,61 @@ def run_analysis(argv):
         substep_dur[(p, ss)] += s['dur']
         phase_agent_busy[p] += s['dur']
 
-    # ---------- TIMELINE (idle-gap segmentation) ----------
-    # merge main-thread event times + subagent spans into one activity stream
-    stream=[]  # (dt, label)
-    for t,tok,kind,txt in main_events:
-        if kind=='user': stream.append((t,'USER: '+txt))
-        else: stream.append((t,None))
+    # ---------- TIMELINE + IDLE (activity coverage, not main-thread gaps) ----------
+    # The main thread goes SILENT while a sub-agent runs: it is blocked on the Task result and
+    # writes nothing to the transcript. Cutting blocks on holes in the main-thread stream (and
+    # calling every such hole idle) therefore reported a working session as "user away" — an
+    # hour-long agent, or a nine-way parallel wave, left no main-thread trace at all.
+    # Activity is every API CALL in the run (main thread AND sub-agents, i.e. `events`) plus each
+    # sub-agent's whole span. Idle is what none of that covers, for longer than GAP.
+    GAP=20*60
+    act=[(t,t) for t,_tk in events]
+    act+=[(s['first'], s['last'] or s['first']) for s in subs if s['first']]
+    SPAN0=main_events[0][0]; SPAN1=main_events[-1][0]
     for s in subs:
-        if s['first']: stream.append((s['first'], 'SPAWN:'+s['type']+':'+(s['desc'] or '')))
-    stream.sort(key=lambda x:x[0])
+        if s['first'] and s['first']<SPAN0: SPAN0=s['first']
+        if s['last'] and s['last']>SPAN1: SPAN1=s['last']
+    idle_iv=idle_spans(SPAN0,SPAN1,act,GAP)
+    idle_sec=sum((b-a).total_seconds() for a,b in idle_iv)
+    active_sec=max(0.0,(SPAN1-SPAN0).total_seconds()-idle_sec)
 
-    GAP=20*60  # 20 min idle splits a block
-    blocks=[]
-    cur=None
-    for t,label in stream:
-        if cur is None or (t-cur['end']).total_seconds()>GAP:
-            cur={'start':t,'end':t,'events':[], 'spawns':collections.Counter(),'users':[]}
-            blocks.append(cur)
-        cur['end']=t
-        if label:
-            if label.startswith('USER: '): cur['users'].append((t,label[6:]))
-            elif label.startswith('SPAWN:'):
-                _,ty,desc=label.split(':',2)
-                cur['spawns'][ty]+=1
-                cur['events'].append((t,ty,desc))
+    # a block is one working stretch: activity merged across holes shorter than GAP, so blocks
+    # are separated by the idle gaps above — plus one more boundary that keeps the narrative
+    # readable on agent-heavy runs, where a single stretch can be six hours long: a user turn
+    # that arrives after GAP of user silence starts a new block. It is a NEW INSTRUCTION, and
+    # the section is meant to answer "what happened when", not "when was the transcript quiet".
+    clusters=merge_iv(act,GAP) or [(SPAN0,SPAN1)]
+    cuts=[]; _lastu=None
+    for t,tok,kind,txt in main_events:
+        if kind!='user': continue
+        if _lastu is not None and (t-_lastu).total_seconds()>GAP: cuts.append(t)
+        _lastu=t
+    pieces=[]
+    for a,b in clusters:
+        edges=[a]+[c for c in cuts if a<c<b]+[b]
+        pieces+=[(edges[i],edges[i+1]) for i in range(len(edges)-1) if edges[i+1]>edges[i]]
+    blocks=[{'start':a,'end':b,'events':[],'spawns':collections.Counter(),'users':[]}
+            for a,b in pieces]
 
-    # the main thread's "work-hours" = its active footprint: the summed duration of the activity
-    # blocks it drives (the same active windows the report calls "active wall-clock"). It overlaps
+    def block_at(t):
+        hit=None
+        for b in blocks:
+            if b['start']<=t<=b['end']: hit=b
+            elif b['start']>t: break
+        return hit or (blocks[0] if t<blocks[0]['start'] else blocks[-1])
+
+    for t,tok,kind,txt in main_events:
+        if kind=='user': block_at(t)['users'].append((t,txt))
+    for s in subs:
+        if not s['first']: continue
+        b=block_at(s['first'])
+        b['spawns'][s['type']]+=1
+        b['events'].append((s['first'],s['type'],s['desc']))
+    for b in blocks: b['events'].sort(key=lambda e:e[0])
+
+    # the main thread's "work-hours" = the run's active footprint (wall minus idle). It overlaps
     # sub-agent time (they run concurrently), so it stays its own group, never added onto another.
-    phase_agent_busy[MAIN]=sum((b['end']-b['start']).total_seconds() for b in blocks
-        if not ((b['end']-b['start']).total_seconds()<30 and not b['users'] and not b['spawns']))
+    phase_agent_busy[MAIN]=active_sec
 
     # ---------- OUTPUT ----------
     def tok_out(t): return {**t,'total':total(t)}
@@ -350,6 +404,15 @@ def run_analysis(argv):
           'sample_events':[{'t':t.isoformat(),'ty':ty,'desc':desc} for t,ty,desc in b['events'][:6]],
         })
 
+    # ---------- IDLE (published so the report never re-derives it from block gaps) ----------
+    out['idle']=[{'from':a.isoformat(),'to':b.isoformat(),'sec':(b-a).total_seconds()}
+                 for a,b in idle_iv]
+    out['meta']['span_start']=SPAN0.isoformat()
+    out['meta']['span_end']=SPAN1.isoformat()
+    out['meta']['wall_sec']=(SPAN1-SPAN0).total_seconds()
+    out['meta']['active_sec']=active_sec
+    out['meta']['idle_sec']=idle_sec
+
     # ---------- TOKEN TIME-SERIES (every assistant msg, compact [ms,in,cc,cr,out]) ----------
     events.sort(key=lambda x:x[0])
     out['events']=[[int(t.timestamp()*1000), tok['in'], tok['cc'], tok['cr'], tok['out']] for t,tok in events]
@@ -371,7 +434,8 @@ def run_analysis(argv):
     _pw=[]
     if main_events:
         _pw.append({'id':MAIN,'name':MAIN_NAME,
-                    'start':main_events[0][0].isoformat(),'end':main_events[-1][0].isoformat()})
+                    'start':SPAN0.isoformat(),'end':SPAN1.isoformat()})   # the whole run: an
+                    # agent can outlive the last main-thread message, and the band must cover it
     _pw+=[{'id':p,'name':group_names[p],
         'start':_span[p][0].isoformat(),'end':_span[p][1].isoformat()}
         for p in [g for g in order if g!=MAIN] if p in _span]
@@ -666,6 +730,9 @@ td.cr-col{color:var(--cr);}
   background:color-mix(in srgb,var(--accent) 15%,transparent);
   border-left:1.5px solid var(--accent);border-right:1.5px solid var(--accent);}
 .flowsel[hidden]{display:none;}
+.flowidle{position:absolute;top:0;bottom:0;left:0;right:0;z-index:1;pointer-events:none;}
+.flowidle i{position:absolute;top:0;bottom:0;background:rgba(224,167,44,.20);
+  border-left:1px dashed rgba(224,167,44,.85);border-right:1px dashed rgba(224,167,44,.85);}
 .flowtip{position:absolute;z-index:20;pointer-events:none;background:var(--surface);
   border:1px solid var(--line2);border-radius:9px;box-shadow:var(--shadow);padding:9px 12px;
   font-size:12px;color:var(--ink);min-width:190px;}
@@ -749,6 +816,10 @@ const I18N={
   flow_ov:n=>'+'+n+" more agents ran at once (didn't fit in lanes)",
   flow_lane_lbl_ov:(cap,peak)=>cap+' lanes · peak '+peak+' concurrent', flow_lane_lbl:n=>n+' lanes', flow_peak:x=>'peak '+x,
   flow_dur:'duration', flow_active_now:'active then', flow_started:'started', flow_cr:'cache-read',
+  flow_idle:'idle', flow_idle_in:'of which idle', flow_act_in:'of which active',
+  flow_idle_gap:d=>'idle gap · '+d+' (no API call, no running agent)',
+  flow_idle_tip:n=>n+' idle gap(s): >20 min with no API call and no running agent',
+  flow_idle_none:'no idle gap in this session — an agent or an API call covers every minute',
   blk_min:x=>x+' min', blk_imgs:n=>n+' images', blk_cmds:'Commands', blk_spawned:'Spawned agents', blk_firstev:'First events',
   srch_open:'Search (Ctrl/Cmd+F)', srch_open_aria:'Search', srch_ph:'Search…  (regex supported)',
   srch_case:'Case sensitive', srch_regex:'Use regex', srch_prev:'Previous (Shift+Enter)', srch_next:'Next (Enter)', srch_close:'Close (Esc)',
@@ -803,6 +874,10 @@ const I18N={
   flow_ov:n=>'+'+n+' agent daha aynı anda çalıştı (şeritlere sığmadı)',
   flow_lane_lbl_ov:(cap,peak)=>cap+' şerit · tepe '+peak+' eşzamanlı', flow_lane_lbl:n=>n+' şerit', flow_peak:x=>'tepe '+x,
   flow_dur:'süre', flow_active_now:'o an aktif', flow_started:'başlayan', flow_cr:'cache-read',
+  flow_idle:'idle', flow_idle_in:'bunun idle kısmı', flow_act_in:'bunun aktif kısmı',
+  flow_idle_gap:d=>'idle boşluk · '+d+' (API call yok, çalışan agent yok)',
+  flow_idle_tip:n=>n+' idle boşluk: 20 dk üstü, hiç API call ve çalışan agent yok',
+  flow_idle_none:'bu oturumda idle boşluk yok — her dakikayı bir agent ya da bir API call kaplıyor',
   blk_min:x=>x+' dk', blk_imgs:n=>n+' görsel', blk_cmds:'Komutlar', blk_spawned:"Spawn edilen agent'lar", blk_firstev:'İlk olaylar',
   srch_open:'Ara (Ctrl/Cmd+F)', srch_open_aria:'Ara', srch_ph:'Ara…  (regex destekli)',
   srch_case:'Büyük/küçük harf duyarlı', srch_regex:'Regex kullan', srch_prev:'Önceki (Shift+Enter)', srch_next:'Sonraki (Enter)', srch_close:'Kapat (Esc)',
@@ -858,6 +933,10 @@ const I18N={
   flow_ov:n=>'另有 +'+n+' 个 agent 同时运行（泳道容纳不下）',
   flow_lane_lbl_ov:(cap,peak)=>cap+' 条泳道 · 峰值 '+peak+' 并发', flow_lane_lbl:n=>n+' 条泳道', flow_peak:x=>'峰值 '+x,
   flow_dur:'时长', flow_active_now:'当时活跃', flow_started:'开始', flow_cr:'缓存读取',
+  flow_idle:'空闲', flow_idle_in:'其中空闲', flow_act_in:'其中活跃',
+  flow_idle_gap:d=>'空闲间隔 · '+d+'（无 API 调用、无运行中的 agent）',
+  flow_idle_tip:n=>n+' 个空闲间隔：超过 20 分钟且无 API 调用、无运行中的 agent',
+  flow_idle_none:'本次会话没有空闲间隔 — 每一分钟都有 agent 或 API 调用',
   blk_min:x=>x+' 分', blk_imgs:n=>n+' 张图片', blk_cmds:'命令', blk_spawned:'派生的 agent', blk_firstev:'首批事件',
   srch_open:'搜索 (Ctrl/Cmd+F)', srch_open_aria:'搜索', srch_ph:'搜索…（支持正则）',
   srch_case:'区分大小写', srch_regex:'使用正则', srch_prev:'上一个 (Shift+Enter)', srch_next:'下一个 (Enter)', srch_close:'关闭 (Esc)',
@@ -1301,11 +1380,19 @@ function agentGroup(ty){
 // ===== interactive flow timeline (section 05) =====
 let flowSel=null;                       // committed [aMs,bMs] or null
 const flowTok={gin:true,out:true,cr:true};
+let flowIdle=false;                     // yellow idle-gap overlay
+// Idle is published by the analyzer (a hole with no API call and no running agent, longer
+// than 20 min). It is NOT re-derived from the gaps between blocks: a block that is dropped
+// for being tiny would otherwise turn into fake idle.
+const FIDLE=(DATA.idle||[]).map(x=>[Date.parse(x.from),Date.parse(x.to)])
+  .filter(x=>isFinite(x[0])&&isFinite(x[1])&&x[1]>x[0]).sort((a,b)=>a[0]-b[0]);
+const idleSec=(a,b)=>FIDLE.reduce((s,[x,y])=>s+Math.max(0,Math.min(b,y)-Math.max(a,x)),0)/1000;
 function tcAbs(ms){const d=new Date(ms);return dayLabel(d)+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0');}
 function flowAgg(a,b,AG){
   let i=0,cc=0,cr=0,o=0;for(const e of EV){if(e[0]>=a&&e[0]<=b){i+=e[1];cc+=e[2];cr+=e[3];o+=e[4];}}
   return {gin:i+cc,out:o,cr:cr,total:i+cc+cr+o,
-          overlap:AG.filter(x=>x.s<b&&x.e>a).length, started:AG.filter(x=>x.s>=a&&x.s<=b).length, dur:(b-a)/1000};
+          overlap:AG.filter(x=>x.s<b&&x.e>a).length, started:AG.filter(x=>x.s>=a&&x.s<=b).length,
+          dur:(b-a)/1000, idle:idleSec(a,b)};
 }
 function renderFlow(){
   const root=document.getElementById('flowRoot'); if(!root) return;
@@ -1332,6 +1419,7 @@ function renderFlow(){
       <div class="flowtrack" id="trTok"><span class="tlabel">${t('flow_tok')}</span></div>
       <div class="flowtrack" id="trPhase"><span class="tlabel">${t('flow_phase')}</span></div>
       <div class="flowtrack" id="trAxis"></div>
+      <div class="flowidle" id="flowIdleEl"></div>
       <div class="flowsel" id="flowSelEl" hidden></div>
       <div class="flowcross" id="flowCrossEl" hidden></div>
       <div class="flowtip" id="flowTipEl" hidden></div>
@@ -1405,10 +1493,19 @@ function renderFlow(){
     ax+=`<text x="${xx.toFixed(1)}" y="13" fill="${ink2}" font-size="10" text-anchor="${k===0?'start':k===NT-1?'end':'middle'}" font-family="ui-monospace,Menlo,monospace">${tcAbs(tt)}</text>`;}
   root.querySelector('#trAxis').insertAdjacentHTML('beforeend',`<svg class="flowsvg" viewBox="0 0 ${W} ${axH}" height="${axH}">${ax}</svg>`);
 
+  // idle overlay — yellow bands over every gap the analyzer marked idle
+  const idleEl=root.querySelector('#flowIdleEl');
+  idleEl.innerHTML=!flowIdle?'':FIDLE.map(([a,b])=>{const x=Math.max(0,fx(a)),w=Math.min(W,fx(b))-x;
+    return w>0?`<i style="left:${x.toFixed(1)}px;width:${w.toFixed(1)}px" title="${aesc(t('flow_idle_gap',dfmt((b-a)/1000)))}"></i>`:'';}).join('');
+
   // token toggle buttons
   const tokEl=root.querySelector('#flowTok');
-  tokEl.innerHTML=[['gin','tip_in',green],['out','tip_out',red],['cr','tip_cache',grey]].map(([k,l,col])=>`<button data-k="${k}" class="${flowTok[k]?'':'off'}"><span class="sw" style="background:${col}"></span>${t(l)}</button>`).join('');
-  tokEl.querySelectorAll('button').forEach(b=>b.onclick=()=>{flowTok[b.dataset.k]=!flowTok[b.dataset.k];renderFlow();});
+  const yellow='#e0a72c';
+  tokEl.innerHTML=[['gin','tip_in',green],['out','tip_out',red],['cr','tip_cache',grey]].map(([k,l,col])=>`<button data-k="${k}" class="${flowTok[k]?'':'off'}"><span class="sw" style="background:${col}"></span>${t(l)}</button>`).join('')
+    +`<button data-k="idle" class="${flowIdle?'':'off'}" title="${aesc(FIDLE.length?t('flow_idle_tip',FIDLE.length):t('flow_idle_none'))}" style="border-color:${flowIdle?yellow:'var(--line)'}"><span class="sw" style="background:${yellow}"></span>${t('flow_idle')} ${hrs(FIDLE.reduce((s,[a,b])=>s+(b-a)/1000,0))}</button>`;
+  tokEl.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    if(b.dataset.k==='idle')flowIdle=!flowIdle; else flowTok[b.dataset.k]=!flowTok[b.dataset.k];
+    renderFlow();});
 
   // interaction: crosshair + range select + summary box
   const cross=root.querySelector('#flowCrossEl'), selEl=root.querySelector('#flowSelEl'), tip=root.querySelector('#flowTipEl'), clr=root.querySelector('#flowClear');
@@ -1417,6 +1514,8 @@ function renderFlow(){
   const showTip=(cx,cyPix,a,b)=>{const g=flowAgg(a,b,AG),rr=body.getBoundingClientRect();
     tip.innerHTML=`<div class="th">${tcAbs(a)} – ${tcAbs(b).slice(-5)}</div>
       <div class="tr"><span>${t('flow_dur')}</span><span>${dfmt(g.dur)}</span></div>
+      <div class="tr"><span style="color:#e0a72c">${t('flow_idle_in')}</span><span>${dfmt(g.idle)}</span></div>
+      <div class="tr"><span>${t('flow_act_in')}</span><span>${dfmt(Math.max(0,g.dur-g.idle))}</span></div>
       <div class="tr"><span>${t('flow_active_now')}</span><span>${t('ag_agents',g.overlap)}</span></div>
       <div class="tr"><span>${t('flow_started')}</span><span>${t('ag_agents',g.started)}</span></div>
       <div class="tr"><span style="color:${green}">${t('tip_in')}</span><span>${kfmt(g.gin)}</span></div>
@@ -1681,10 +1780,14 @@ def build_report(d, here):
 
     def p(s): return dt.datetime.fromisoformat(s)
     span=(p(d['meta']['span_end'])-p(d['meta']['span_start'])).total_seconds()
-    active=sum(b['dur_sec'] for b in d['timeline'])
+    # active/idle come from the analyzer's interval math (every API call + every agent span).
+    # Summing block durations is only the fallback for an older report-data.json: sub-30s blocks
+    # are dropped from the table and would silently reappear as "idle".
+    active=d['meta'].get('active_sec')
+    if active is None: active=sum(b['dur_sec'] for b in d['timeline'])
     d['meta']['wall_sec']=span
     d['meta']['active_sec']=active
-    d['meta']['idle_sec']=span-active
+    d['meta']['idle_sec']=d['meta'].get('idle_sec', span-active)
     d['meta']['busy_sec']=sum(pp['agent_busy_sec'] for pp in d['groups'])
 
     # ---- trilingual narrative per timeline block (en default, tr, zh) ----
@@ -1752,8 +1855,29 @@ def build_report(d, here):
     print('wrote report.html', len(out),'bytes')
 
 
+def selftest():
+    """The idle rule, on a synthetic session. This is the logic that used to call a working
+    session 'idle', so it is the one check this file carries."""
+    T=lambda m: dt.datetime(2026,1,1,tzinfo=dt.timezone.utc)+dt.timedelta(minutes=m)
+    GAP=20*60
+    cov=[(T(0),T(0)),(T(10),T(10)),      # two API calls, 10 min apart
+         (T(60),T(120))]                  # one sub-agent that ran quietly for an hour
+    idle=idle_spans(T(0),T(400),cov,GAP)
+    assert idle==[(T(10),T(60)),(T(120),T(400))], idle
+    assert sum((b-a).total_seconds() for a,b in idle)==330*60
+    # the 0->10 hole is shorter than GAP: think-time inside a working stretch, not idle
+    assert all((b-a).total_seconds()>GAP for a,b in idle)
+    # THE BUG: only the agent's START used to be known, so its hour counted as the user away
+    assert idle_spans(T(60),T(120),[(T(60),T(120))],GAP)==[]
+    # blocks are activity merged across sub-GAP holes, so they are exactly the non-idle stretches
+    assert merge_iv(cov,GAP)==[(T(0),T(10)),(T(60),T(120))]
+    assert sub_iv([(T(0),T(10))],[(T(2),T(4))])==[(T(0),T(2)),(T(4),T(10))]
+    print('selftest ok')
+
 def main():
     argv = sys.argv[1:]
+    if argv and argv[0]=='--selftest':
+        return selftest()
     outdir = None
     rest = []
     i = 0
